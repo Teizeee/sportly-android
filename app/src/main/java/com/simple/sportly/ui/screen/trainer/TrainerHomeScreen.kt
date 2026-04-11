@@ -27,33 +27,60 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.simple.sportly.BuildConfig
+import com.simple.sportly.domain.model.TrainerReview
+import com.simple.sportly.domain.model.TrainerSlot
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.yield
 
 private val ScreenBg = Color(0xFFE7E3DA)
 private val CardBg = Color(0xFFD1CAB9)
 private val AccentDark = Color(0xFF565347)
 private val MainText = Color(0xFF29251F)
+private val OpenButtonColor = Color(0xFF5B8A5A)
+private val CloseButtonColor = Color(0xFFB6544A)
 
 @Composable
 fun TrainerHomeScreen(
@@ -67,6 +94,13 @@ fun TrainerHomeScreen(
     onPhoneChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onSaveClick: () -> Unit,
+    onRetryReviewsClick: () -> Unit,
+    onScheduleTabShown: () -> Unit,
+    onScheduleDateSelected: (LocalDate) -> Unit,
+    onOpenDayClick: () -> Unit,
+    onCloseDayClick: () -> Unit,
+    onSlotAvailabilityClick: (TrainerSlot) -> Unit,
+    onRetryScheduleClick: () -> Unit,
     onAvatarSelected: (Uri) -> Unit,
     onLogoutClick: () -> Unit
 ) {
@@ -220,11 +254,333 @@ fun TrainerHomeScreen(
                 }
 
                 TrainerTab.Schedule -> {
-                    PlaceholderTab(text = "Расписание")
+                    ScheduleTab(
+                        state = state,
+                        onScheduleTabShown = onScheduleTabShown,
+                        onScheduleDateSelected = onScheduleDateSelected,
+                        onOpenDayClick = onOpenDayClick,
+                        onCloseDayClick = onCloseDayClick,
+                        onSlotAvailabilityClick = onSlotAvailabilityClick,
+                        onRetryScheduleClick = onRetryScheduleClick
+                    )
                 }
 
                 TrainerTab.Awards -> {
-                    PlaceholderTab(text = "Отзывы")
+                    ReviewsTab(
+                        state = state,
+                        onRetryClick = onRetryReviewsClick
+                    )
+                    return@Box
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ScheduleTab(
+    state: TrainerHomeUiState,
+    onScheduleTabShown: () -> Unit,
+    onScheduleDateSelected: (LocalDate) -> Unit,
+    onOpenDayClick: () -> Unit,
+    onCloseDayClick: () -> Unit,
+    onSlotAvailabilityClick: (TrainerSlot) -> Unit,
+    onRetryScheduleClick: () -> Unit
+) {
+    val isPastDate = state.selectedScheduleDate.isBefore(LocalDate.now())
+    var shouldRenderCalendar by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        onScheduleTabShown()
+        // Let the tab render first to avoid blocking navigation transition.
+        yield()
+        shouldRenderCalendar = true
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+    ) {
+        if (shouldRenderCalendar) {
+            val selectedDateMillis = state.selectedScheduleDate.toEpochMillis()
+            val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDateMillis)
+
+            LaunchedEffect(state.selectedScheduleDate) {
+                if (datePickerState.selectedDateMillis != selectedDateMillis) {
+                    datePickerState.selectedDateMillis = selectedDateMillis
+                }
+            }
+
+            LaunchedEffect(datePickerState) {
+                snapshotFlow { datePickerState.selectedDateMillis }
+                    .filterNotNull()
+                    .map { it.toLocalDate() }
+                    .distinctUntilChanged()
+                    .collect(onScheduleDateSelected)
+            }
+
+            Surface(
+                color = CardBg,
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                DatePicker(
+                    state = datePickerState,
+                    modifier = Modifier.fillMaxWidth(),
+                    title = null,
+                    headline = null,
+                    showModeToggle = false,
+                    colors = androidx.compose.material3.DatePickerDefaults.colors(
+                        containerColor = CardBg,
+                        titleContentColor = MainText,
+                        headlineContentColor = MainText,
+                        weekdayContentColor = MainText,
+                        subheadContentColor = MainText,
+                        yearContentColor = MainText,
+                        currentYearContentColor = AccentDark,
+                        selectedYearContainerColor = AccentDark,
+                        selectedYearContentColor = ScreenBg,
+                        dayContentColor = MainText,
+                        disabledDayContentColor = MainText.copy(alpha = 0.35f),
+                        selectedDayContainerColor = AccentDark,
+                        selectedDayContentColor = ScreenBg,
+                        todayContentColor = AccentDark,
+                        todayDateBorderColor = AccentDark,
+                        navigationContentColor = MainText
+                    )
+                )
+            }
+        } else {
+            Surface(
+                color = CardBg,
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(380.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = AccentDark)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Surface(
+            color = CardBg,
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                Text(
+                    text = formatScheduleDate(state.selectedScheduleDate),
+                    color = MainText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FontFamily.Serif
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = onCloseDayClick,
+                        enabled = !state.isScheduleActionLoading && !isPastDate,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CloseButtonColor,
+                            contentColor = ScreenBg
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Закрыть", fontFamily = FontFamily.Serif)
+                    }
+                    Button(
+                        onClick = onOpenDayClick,
+                        enabled = !state.isScheduleActionLoading && !isPastDate,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = OpenButtonColor,
+                            contentColor = ScreenBg
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Открыть", fontFamily = FontFamily.Serif)
+                    }
+                }
+            }
+        }
+
+        if (!state.scheduleErrorMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = state.scheduleErrorMessage,
+                color = MaterialTheme.colorScheme.error,
+                fontFamily = FontFamily.Serif
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onRetryScheduleClick,
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AccentDark,
+                    contentColor = ScreenBg
+                )
+            ) {
+                Text("Повторить", fontFamily = FontFamily.Serif)
+            }
+        }
+
+        if (!state.scheduleInfoMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = state.scheduleInfoMessage,
+                color = AccentDark,
+                fontFamily = FontFamily.Serif
+            )
+        }
+
+        if (state.isScheduleLoading || state.isScheduleActionLoading) {
+            Spacer(modifier = Modifier.height(8.dp))
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = AccentDark,
+                trackColor = CardBg.copy(alpha = 0.6f)
+            )
+        }
+
+        if (isPastDate) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Прошедшая дата доступна только для просмотра",
+                color = MainText.copy(alpha = 0.72f),
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Serif
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Surface(
+            color = CardBg.copy(alpha = 0.55f),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                Text(
+                    text = "Слоты на день",
+                    color = MainText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = FontFamily.Serif
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MainText.copy(alpha = 0.18f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (state.isScheduleLoading && state.slots.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = AccentDark)
+            }
+            return
+        }
+
+        if (state.slots.isEmpty()) {
+            Text(
+                text = "Слотов на выбранный день нет",
+                color = MainText,
+                fontFamily = FontFamily.Serif
+            )
+            return
+        }
+
+        state.slots.forEach { slot ->
+            ScheduleSlotCard(
+                slot = slot,
+                actionEnabled = !state.isScheduleActionLoading && !isPastDate,
+                onSlotAvailabilityClick = onSlotAvailabilityClick
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun ScheduleSlotCard(
+    slot: TrainerSlot,
+    actionEnabled: Boolean,
+    onSlotAvailabilityClick: (TrainerSlot) -> Unit
+) {
+    Surface(
+        color = CardBg,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Text(
+                text = "${formatSlotTime(slot.startTime)} - ${formatSlotTime(slot.endTime)}",
+                color = MainText,
+                style = MaterialTheme.typography.titleMedium,
+                fontFamily = FontFamily.Serif
+            )
+
+            val bookedName = formatBookedUserName(slot)
+            if (bookedName != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = bookedName,
+                    color = MainText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontFamily = FontFamily.Serif
+                )
+            }
+
+            val bookingStateLabel = bookingStateLabel(slot.bookingStatus)
+            if (!bookingStateLabel.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = bookingStateLabel,
+                    color = MainText.copy(alpha = 0.7f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Serif
+                )
+            }
+
+            val buttonLabel = when {
+                slot.id == null -> "Сделать доступным"
+                slot.bookingId == null -> "Сделать недоступным"
+                else -> null
+            }
+
+            if (buttonLabel != null) {
+                val actionColor = if (slot.id == null) OpenButtonColor else CloseButtonColor
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = { onSlotAvailabilityClick(slot) },
+                    enabled = actionEnabled,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = actionColor,
+                        contentColor = ScreenBg
+                    )
+                ) {
+                    Text(buttonLabel, fontFamily = FontFamily.Serif)
                 }
             }
         }
@@ -232,10 +588,173 @@ fun TrainerHomeScreen(
 }
 
 @Composable
-private fun PlaceholderTab(text: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = text, color = MainText, fontFamily = FontFamily.Serif)
+private fun ReviewsTab(
+    state: TrainerHomeUiState,
+    onRetryClick: () -> Unit
+) {
+    if (state.isReviewsLoading && state.reviews.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = AccentDark)
+        }
+        return
     }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 16.dp)
+    ) {
+        Text(
+            text = "Рейтинг: ${formatAverageRating(state.reviews)}",
+            color = MainText,
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp
+            ),
+            fontFamily = FontFamily.Serif
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        if (!state.reviewsErrorMessage.isNullOrBlank()) {
+            Text(
+                text = state.reviewsErrorMessage,
+                color = MaterialTheme.colorScheme.error,
+                fontFamily = FontFamily.Serif
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onRetryClick,
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AccentDark,
+                    contentColor = ScreenBg
+                )
+            ) {
+                Text("Повторить", fontFamily = FontFamily.Serif)
+            }
+            return
+        }
+
+        if (state.reviews.isEmpty()) {
+            Text(
+                text = "Отзывов пока нет",
+                color = MainText,
+                fontFamily = FontFamily.Serif
+            )
+            return
+        }
+
+        state.reviews.forEach { review ->
+            ReviewCard(
+                authorName = review.authorFullName,
+                rating = review.rating,
+                comment = review.comment.orEmpty()
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun ReviewCard(
+    authorName: String,
+    rating: Int,
+    comment: String
+) {
+    Surface(
+        color = CardBg,
+        shape = RoundedCornerShape(6.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = authorName,
+                    color = MainText,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 18.sp
+                    ),
+                    fontFamily = FontFamily.Serif
+                )
+                RatingStars(rating = rating)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = comment,
+                color = MainText,
+                style = MaterialTheme.typography.bodyLarge,
+                fontFamily = FontFamily.Serif
+            )
+        }
+    }
+}
+
+@Composable
+private fun RatingStars(rating: Int) {
+    val normalizedRating = rating.coerceIn(0, 5)
+    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        repeat(5) { index ->
+            Text(
+                text = if (index < normalizedRating) "★" else "☆",
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                fontSize = 22.sp,
+                lineHeight = 22.sp
+            )
+        }
+    }
+}
+
+private fun formatAverageRating(reviews: List<TrainerReview>): String {
+    if (reviews.isEmpty()) return "0,0"
+    val average = reviews.map { it.rating.coerceIn(0, 5) }.average()
+    return String.format(Locale.US, "%.1f", average).replace('.', ',')
+}
+
+private fun formatScheduleDate(date: LocalDate): String {
+    val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("ru"))
+    return date.format(formatter)
+}
+
+private fun formatSlotTime(value: String): String {
+    return runCatching {
+        LocalDateTime.parse(value).format(DateTimeFormatter.ofPattern("HH:mm"))
+    }.getOrElse {
+        value.substringAfter('T', value).take(5)
+    }
+}
+
+private fun formatBookedUserName(slot: TrainerSlot): String? {
+    val user = slot.bookedUser ?: return null
+    return listOf(user.firstName.trim(), user.lastName.trim())
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+        .ifBlank { null }
+}
+
+private fun bookingStateLabel(status: String?): String? {
+    return when (status) {
+        "VISITED" -> "Посещено"
+        "NOT_VISITED" -> "Не посещено"
+        else -> null
+    }
+}
+
+private fun LocalDate.toEpochMillis(): Long {
+    return atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+}
+
+private fun Long.toLocalDate(): LocalDate {
+    return Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 }
 
 @Composable
@@ -309,7 +828,12 @@ private fun AvatarBlock(
             contentDescription = "Trainer avatar",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
-            loading = { CircularProgressIndicator(modifier = Modifier.size(26.dp), color = AccentDark) },
+            loading = {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(26.dp),
+                    color = AccentDark
+                )
+            },
             error = { DefaultAvatarIcon() }
         )
     }
@@ -552,6 +1076,42 @@ private object TrainerBottomIcons {
                 lineTo(13.15f, 6.125f)
                 lineTo(10f, 2f)
                 lineTo(6.85f, 6.125f)
+                close()
+            }
+        }.build()
+
+    val ReviewStar: ImageVector
+        get() = ImageVector.Builder(
+            name = "ReviewStarFromSvg",
+            defaultWidth = 20.dp,
+            defaultHeight = 19.dp,
+            viewportWidth = 20f,
+            viewportHeight = 19f
+        ).apply {
+            path(fill = SolidColor(Color(0xFF11120D))) {
+                moveTo(6.85f, 14.825f)
+                lineTo(10f, 12.925f)
+                lineTo(13.15f, 14.85f)
+                lineTo(12.325f, 11.25f)
+                lineTo(15.1f, 8.85f)
+                lineTo(11.45f, 8.525f)
+                lineTo(10f, 5.125f)
+                lineTo(8.55f, 8.5f)
+                lineTo(4.9f, 8.825f)
+                lineTo(7.675f, 11.25f)
+                lineTo(6.85f, 14.825f)
+                close()
+                moveTo(3.825f, 19f)
+                lineTo(5.45f, 11.975f)
+                lineTo(0f, 7.25f)
+                lineTo(7.2f, 6.625f)
+                lineTo(10f, 0f)
+                lineTo(12.8f, 6.625f)
+                lineTo(20f, 7.25f)
+                lineTo(14.55f, 11.975f)
+                lineTo(16.175f, 19f)
+                lineTo(10f, 15.275f)
+                lineTo(3.825f, 19f)
                 close()
             }
         }.build()

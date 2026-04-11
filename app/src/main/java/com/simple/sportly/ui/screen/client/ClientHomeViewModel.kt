@@ -3,7 +3,7 @@ package com.simple.sportly.ui.screen.client
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.simple.sportly.domain.repository.AuthRepository
+import com.simple.sportly.domain.repository.ProfileRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +35,7 @@ data class ClientHomeUiState(
 )
 
 class ClientHomeViewModel(
-    private val authRepository: AuthRepository
+    private val profileRepository: ProfileRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ClientHomeUiState())
     val uiState: StateFlow<ClientHomeUiState> = _uiState.asStateFlow()
@@ -78,7 +78,7 @@ class ClientHomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, errorMessage = null, infoMessage = null) }
             runCatching {
-                authRepository.updateMyProfile(
+                profileRepository.updateMyProfile(
                     firstName = state.firstName.trim(),
                     lastName = state.lastName.trim(),
                     patronymic = state.patronymic.trim().ifBlank { null },
@@ -116,7 +116,7 @@ class ClientHomeViewModel(
     private fun loadProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, infoMessage = null) }
-            runCatching { authRepository.getMyProfile() }
+            runCatching { profileRepository.getMyProfile() }
                 .onSuccess { profile ->
                     _uiState.update {
                         it.copy(
@@ -144,11 +144,11 @@ class ClientHomeViewModel(
     }
 
     companion object {
-        fun factory(authRepository: AuthRepository): ViewModelProvider.Factory =
+        fun factory(profileRepository: ProfileRepository): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return ClientHomeViewModel(authRepository) as T
+                    return ClientHomeViewModel(profileRepository) as T
                 }
             }
     }

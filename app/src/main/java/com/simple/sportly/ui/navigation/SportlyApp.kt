@@ -139,7 +139,7 @@ private fun SportlyNavGraph(
         composable(AppDestination.ClientHome.route) {
             val coroutineScope = rememberCoroutineScope()
             val viewModel: ClientHomeViewModel = viewModel(
-                factory = ClientHomeViewModel.factory(appContainer.authRepository)
+                factory = ClientHomeViewModel.factory(appContainer.profileRepository)
             )
             val state by viewModel.uiState.collectAsState()
 
@@ -164,7 +164,11 @@ private fun SportlyNavGraph(
             val context = LocalContext.current
             val coroutineScope = rememberCoroutineScope()
             val viewModel: TrainerHomeViewModel = viewModel(
-                factory = TrainerHomeViewModel.factory(appContainer.authRepository)
+                factory = TrainerHomeViewModel.factory(
+                    profileRepository = appContainer.profileRepository,
+                    trainerReviewsRepository = appContainer.trainerReviewsRepository,
+                    trainerSlotsRepository = appContainer.trainerSlotsRepository
+                )
             )
             val state by viewModel.uiState.collectAsState()
 
@@ -179,6 +183,13 @@ private fun SportlyNavGraph(
                 onPhoneChange = viewModel::onPhoneChanged,
                 onDescriptionChange = viewModel::onDescriptionChanged,
                 onSaveClick = viewModel::saveProfile,
+                onRetryReviewsClick = viewModel::loadReviewsIfNeeded,
+                onScheduleTabShown = viewModel::loadScheduleIfNeeded,
+                onScheduleDateSelected = viewModel::onScheduleDateSelected,
+                onOpenDayClick = viewModel::openSelectedDay,
+                onCloseDayClick = viewModel::closeSelectedDay,
+                onSlotAvailabilityClick = viewModel::toggleSlotAvailability,
+                onRetryScheduleClick = viewModel::loadScheduleForSelectedDate,
                 onAvatarSelected = { uri ->
                     viewModel.uploadAvatar(uri, context.contentResolver)
                 },

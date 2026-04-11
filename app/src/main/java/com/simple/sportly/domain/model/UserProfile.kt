@@ -2,6 +2,7 @@ package com.simple.sportly.domain.model
 
 data class UserProfile(
     val id: String,
+    val trainerId: String?,
     val firstName: String,
     val lastName: String,
     val patronymic: String?,
