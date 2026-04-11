@@ -139,7 +139,13 @@ private fun SportlyNavGraph(
         composable(AppDestination.ClientHome.route) {
             val coroutineScope = rememberCoroutineScope()
             val viewModel: ClientHomeViewModel = viewModel(
-                factory = ClientHomeViewModel.factory(appContainer.profileRepository)
+                factory = ClientHomeViewModel.factory(
+                    profileRepository = appContainer.profileRepository,
+                    gymRepository = appContainer.gymRepository,
+                    gymReviewsRepository = appContainer.gymReviewsRepository,
+                    gymTrainersRepository = appContainer.gymTrainersRepository,
+                    trainerReviewsRepository = appContainer.trainerReviewsRepository
+                )
             )
             val state by viewModel.uiState.collectAsState()
 
@@ -151,6 +157,23 @@ private fun SportlyNavGraph(
                 onPatronymicChange = viewModel::onPatronymicChanged,
                 onEmailChange = viewModel::onEmailChanged,
                 onPushEnabledChange = viewModel::onPushEnabledChanged,
+                onMarketplaceSearchQueryChange = viewModel::onMarketplaceSearchQueryChanged,
+                onMarketplaceCityFilterChange = viewModel::onMarketplaceCityFilterChanged,
+                onMarketplaceRatingFilterChange = viewModel::onMarketplaceRatingFilterChanged,
+                onMarketplaceSearchClick = viewModel::searchGyms,
+                onMarketplaceGymClick = viewModel::openGymDetails,
+                onMarketplaceBackToListClick = viewModel::closeGymDetails,
+                onMarketplacePricesClick = viewModel::openGymPrices,
+                onMarketplaceBackFromPricesClick = viewModel::closeGymPrices,
+                onMarketplacePricesTabSelected = viewModel::selectGymPricesTab,
+                onMarketplaceReviewsClick = viewModel::openGymReviews,
+                onMarketplaceBackFromReviewsClick = viewModel::closeGymReviews,
+                onMarketplaceTrainersClick = viewModel::openGymTrainers,
+                onMarketplaceBackFromTrainersClick = viewModel::closeGymTrainers,
+                onMarketplaceTrainerClick = viewModel::openTrainerDetails,
+                onMarketplaceBackFromTrainerDetailsClick = viewModel::closeTrainerDetails,
+                onMarketplaceTrainerReviewsClick = viewModel::openTrainerReviews,
+                onMarketplaceBackFromTrainerReviewsClick = viewModel::closeTrainerReviews,
                 onSaveClick = viewModel::saveProfile,
                 onLogoutClick = {
                     coroutineScope.launch {
