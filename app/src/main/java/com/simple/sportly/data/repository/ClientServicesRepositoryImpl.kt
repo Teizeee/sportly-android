@@ -3,12 +3,15 @@ package com.simple.sportly.data.repository
 import com.simple.sportly.data.remote.api.client.ClientServicesApi
 import com.simple.sportly.data.remote.dto.client.ActiveClientServicesDto
 import com.simple.sportly.data.remote.dto.client.ClientMembershipDto
+import com.simple.sportly.data.remote.dto.client.ClientProgressCreateDto
+import com.simple.sportly.data.remote.dto.client.ClientProgressDto
 import com.simple.sportly.data.remote.dto.client.UserTrainerPackageDto
 import com.simple.sportly.domain.model.ActiveMembership
 import com.simple.sportly.domain.model.ActivePackage
 import com.simple.sportly.domain.model.ClientActiveServices
 import com.simple.sportly.domain.model.ClientMembership
 import com.simple.sportly.domain.model.ClientMembershipStatus
+import com.simple.sportly.domain.model.ClientProgress
 import com.simple.sportly.domain.model.ClientTrainerPackage
 import com.simple.sportly.domain.model.ClientTrainerPackageStatus
 import com.simple.sportly.domain.repository.ClientServicesRepository
@@ -34,6 +37,20 @@ class ClientServicesRepositoryImpl(
 
     override suspend fun activatePackage(userTrainerPackageId: String): ClientTrainerPackage {
         return clientServicesApi.activatePackage(userTrainerPackageId).toDomain()
+    }
+
+    override suspend fun getMyProgress(): List<ClientProgress> {
+        return clientServicesApi.getMyProgress().map { it.toDomain() }
+    }
+
+    override suspend fun createMyProgress(weight: Double, height: Double, bmi: Double?): ClientProgress {
+        return clientServicesApi.createMyProgress(
+            request = ClientProgressCreateDto(
+                weight = weight,
+                height = height,
+                bmi = bmi
+            )
+        ).toDomain()
     }
 
     private fun ActiveClientServicesDto.toDomain(): ClientActiveServices {
@@ -102,6 +119,17 @@ class ClientServicesRepositoryImpl(
             purchasedAt = purchasedAt,
             activatedAt = activatedAt,
             expiresAt = expiresAt
+        )
+    }
+
+    private fun ClientProgressDto.toDomain(): ClientProgress {
+        return ClientProgress(
+            id = id,
+            userId = userId,
+            weight = weight.toDoubleOrNull() ?: 0.0,
+            height = height.toDoubleOrNull() ?: 0.0,
+            bmi = bmi.toDoubleOrNull() ?: 0.0,
+            recordedAt = recordedAt
         )
     }
 }

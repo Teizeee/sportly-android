@@ -132,6 +132,14 @@ fun ClientHomeScreen(
     onCloseStatisticsPackages: () -> Unit,
     onRefreshPackages: () -> Unit,
     onActivatePackage: (String) -> Unit,
+    onOpenStatisticsWeight: () -> Unit,
+    onCloseStatisticsWeight: () -> Unit,
+    onWeightInputChange: (String) -> Unit,
+    onHeightInputChange: (String) -> Unit,
+    onCalculateBmiClick: () -> Unit,
+    onOpenWeightDynamics: () -> Unit,
+    onCloseWeightDynamics: () -> Unit,
+    onRefreshWeightDynamics: () -> Unit,
     onSaveClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
@@ -317,6 +325,30 @@ fun ClientHomeScreen(
                             onRetryClick = onRefreshPackages,
                             onActivateClick = onActivatePackage
                         )
+                    } else if (state.isStatisticsWeightOpened && state.isStatisticsWeightDynamicsOpened) {
+                        BackHandler(onBack = onCloseWeightDynamics)
+                        WeightDynamicsPage(
+                            progressHistory = state.progressHistory,
+                            isLoading = state.isProgressLoading,
+                            errorMessage = state.progressLoadErrorMessage,
+                            onBackClick = onCloseWeightDynamics,
+                            onRetryClick = onRefreshWeightDynamics
+                        )
+                    } else if (state.isStatisticsWeightOpened) {
+                        BackHandler(onBack = onCloseStatisticsWeight)
+                        WeightStatisticsPage(
+                            weightValue = state.weightInput,
+                            heightValue = state.heightInput,
+                            bmiValue = state.bmiValue,
+                            isSaving = state.isProgressSaving,
+                            errorMessage = state.progressSaveErrorMessage,
+                            infoMessage = state.progressSaveInfoMessage,
+                            onBackClick = onCloseStatisticsWeight,
+                            onWeightChange = onWeightInputChange,
+                            onHeightChange = onHeightInputChange,
+                            onCalculateClick = onCalculateBmiClick,
+                            onWeightDynamicsClick = onOpenWeightDynamics
+                        )
                     } else {
                         StatisticsTab(
                             activeMembership = state.activeMembership,
@@ -325,7 +357,8 @@ fun ClientHomeScreen(
                             errorMessage = state.activeServicesErrorMessage,
                             onRetryClick = onRefreshActiveServices,
                             onMembershipsClick = onOpenStatisticsMemberships,
-                            onPackagesClick = onOpenStatisticsPackages
+                            onPackagesClick = onOpenStatisticsPackages,
+                            onWeightClick = onOpenStatisticsWeight
                         )
                     }
                 }

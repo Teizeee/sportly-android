@@ -82,3 +82,27 @@ data class UserTrainerPackageDto(
     @SerializedName("service")
     val service: TrainerPackageServiceDto
 )
+
+data class ClientProgressCreateDto(
+    @SerializedName("weight")
+    val weight: Double,
+    @SerializedName("height")
+    val height: Double,
+    @SerializedName("bmi")
+    val bmi: Double?
+)
+
+data class ClientProgressDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("user_id")
+    val userId: String,
+    @SerializedName("weight")
+    val weight: String,
+    @SerializedName("height")
+    val height: String,
+    @SerializedName("bmi")
+    val bmi: String,
+    @SerializedName("recorded_at")
+    val recordedAt: String
+)

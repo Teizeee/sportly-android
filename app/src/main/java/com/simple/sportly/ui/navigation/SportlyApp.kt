@@ -184,6 +184,14 @@ private fun SportlyNavGraph(
                 onCloseStatisticsPackages = viewModel::closeStatisticsPackages,
                 onRefreshPackages = viewModel::refreshPackages,
                 onActivatePackage = viewModel::activatePackage,
+                onOpenStatisticsWeight = viewModel::openStatisticsWeight,
+                onCloseStatisticsWeight = viewModel::closeStatisticsWeight,
+                onWeightInputChange = viewModel::onWeightInputChanged,
+                onHeightInputChange = viewModel::onHeightInputChanged,
+                onCalculateBmiClick = viewModel::calculateAndSaveBmi,
+                onOpenWeightDynamics = viewModel::openStatisticsWeightDynamics,
+                onCloseWeightDynamics = viewModel::closeStatisticsWeightDynamics,
+                onRefreshWeightDynamics = viewModel::refreshProgressHistory,
                 onSaveClick = viewModel::saveProfile,
                 onLogoutClick = {
                     coroutineScope.launch {

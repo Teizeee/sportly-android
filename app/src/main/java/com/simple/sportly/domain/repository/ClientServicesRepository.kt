@@ -2,6 +2,7 @@ package com.simple.sportly.domain.repository
 
 import com.simple.sportly.domain.model.ClientActiveServices
 import com.simple.sportly.domain.model.ClientMembership
+import com.simple.sportly.domain.model.ClientProgress
 import com.simple.sportly.domain.model.ClientTrainerPackage
 
 interface ClientServicesRepository {
@@ -10,4 +11,6 @@ interface ClientServicesRepository {
     suspend fun activateMembership(membershipId: String): ClientMembership
     suspend fun getMyPackages(): List<ClientTrainerPackage>
     suspend fun activatePackage(userTrainerPackageId: String): ClientTrainerPackage
+    suspend fun getMyProgress(): List<ClientProgress>
+    suspend fun createMyProgress(weight: Double, height: Double, bmi: Double?): ClientProgress
 }

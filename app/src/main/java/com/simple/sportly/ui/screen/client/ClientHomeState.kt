@@ -3,6 +3,7 @@ package com.simple.sportly.ui.screen.client
 import com.simple.sportly.domain.model.ActiveMembership
 import com.simple.sportly.domain.model.ActivePackage
 import com.simple.sportly.domain.model.ClientMembership
+import com.simple.sportly.domain.model.ClientProgress
 import com.simple.sportly.domain.model.ClientTrainerPackage
 import com.simple.sportly.domain.model.Gym
 import com.simple.sportly.domain.model.GymReview
@@ -44,6 +45,8 @@ data class ClientHomeUiState(
     val isGymTrainersOpened: Boolean = false,
     val isStatisticsMembershipsOpened: Boolean = false,
     val isStatisticsPackagesOpened: Boolean = false,
+    val isStatisticsWeightOpened: Boolean = false,
+    val isStatisticsWeightDynamicsOpened: Boolean = false,
     val activeMembership: ActiveMembership? = null,
     val activePackage: ActivePackage? = null,
     val isActiveServicesLoading: Boolean = false,
@@ -56,6 +59,15 @@ data class ClientHomeUiState(
     val isPackagesLoading: Boolean = false,
     val packagesErrorMessage: String? = null,
     val activatingPackageId: String? = null,
+    val weightInput: String = "",
+    val heightInput: String = "",
+    val bmiValue: Double? = null,
+    val isProgressSaving: Boolean = false,
+    val progressSaveErrorMessage: String? = null,
+    val progressSaveInfoMessage: String? = null,
+    val progressHistory: List<ClientProgress> = emptyList(),
+    val isProgressLoading: Boolean = false,
+    val progressLoadErrorMessage: String? = null,
     val gymPricesTab: GymPricesTab = GymPricesTab.Memberships,
     val gymReviews: List<GymReview> = emptyList(),
     val gymReviewsForGymId: String? = null,

@@ -2,7 +2,10 @@ package com.simple.sportly.data.remote.api.client
 
 import com.simple.sportly.data.remote.dto.client.ActiveClientServicesDto
 import com.simple.sportly.data.remote.dto.client.ClientMembershipDto
+import com.simple.sportly.data.remote.dto.client.ClientProgressCreateDto
+import com.simple.sportly.data.remote.dto.client.ClientProgressDto
 import com.simple.sportly.data.remote.dto.client.UserTrainerPackageDto
+import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -26,4 +29,12 @@ interface ClientServicesApi {
     suspend fun activatePackage(
         @Path("user_trainer_package_id") userTrainerPackageId: String
     ): UserTrainerPackageDto
+
+    @GET("api/v1/clients/me/progress")
+    suspend fun getMyProgress(): List<ClientProgressDto>
+
+    @POST("api/v1/clients/me/progress")
+    suspend fun createMyProgress(
+        @Body request: ClientProgressCreateDto
+    ): ClientProgressDto
 }

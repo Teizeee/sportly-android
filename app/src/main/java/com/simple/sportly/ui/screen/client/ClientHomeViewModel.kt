@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.pow
+import kotlin.math.round
 
 class ClientHomeViewModel(
     private val profileRepository: ProfileRepository,
@@ -52,6 +54,16 @@ class ClientHomeViewModel(
                 },
                 isStatisticsPackagesOpened = if (tab == ClientTab.Statistics) {
                     it.isStatisticsPackagesOpened
+                } else {
+                    false
+                },
+                isStatisticsWeightOpened = if (tab == ClientTab.Statistics) {
+                    it.isStatisticsWeightOpened
+                } else {
+                    false
+                },
+                isStatisticsWeightDynamicsOpened = if (tab == ClientTab.Statistics) {
+                    it.isStatisticsWeightDynamicsOpened
                 } else {
                     false
                 },
@@ -90,6 +102,126 @@ class ClientHomeViewModel(
 
     fun closeStatisticsPackages() {
         _uiState.update { it.copy(isStatisticsPackagesOpened = false) }
+    }
+
+    fun openStatisticsWeight() {
+        _uiState.update {
+            it.copy(
+                isStatisticsWeightOpened = true,
+                isStatisticsWeightDynamicsOpened = false,
+                progressSaveErrorMessage = null
+            )
+        }
+    }
+
+    fun closeStatisticsWeight() {
+        _uiState.update {
+            it.copy(
+                isStatisticsWeightOpened = false,
+                isStatisticsWeightDynamicsOpened = false
+            )
+        }
+    }
+
+    fun openStatisticsWeightDynamics() {
+        _uiState.update { it.copy(isStatisticsWeightDynamicsOpened = true) }
+        loadProgressHistory()
+    }
+
+    fun closeStatisticsWeightDynamics() {
+        _uiState.update { it.copy(isStatisticsWeightDynamicsOpened = false) }
+    }
+
+    fun onWeightInputChanged(value: String) {
+        _uiState.update {
+            it.copy(
+                weightInput = value,
+                progressSaveErrorMessage = null,
+                progressSaveInfoMessage = null
+            )
+        }
+    }
+
+    fun onHeightInputChanged(value: String) {
+        _uiState.update {
+            it.copy(
+                heightInput = value,
+                progressSaveErrorMessage = null,
+                progressSaveInfoMessage = null
+            )
+        }
+    }
+
+    fun calculateAndSaveBmi() {
+        if (_uiState.value.isProgressSaving) return
+
+        val weight = _uiState.value.weightInput.toPositiveNumberOrNull()
+        val heightCm = _uiState.value.heightInput.toPositiveNumberOrNull()
+
+        if (weight == null || heightCm == null) {
+            _uiState.update {
+                it.copy(
+                    progressSaveErrorMessage = "Введите корректные вес и рост.",
+                    progressSaveInfoMessage = null
+                )
+            }
+            return
+        }
+
+        val heightMeters = heightCm / 100.0
+        if (heightMeters <= 0.0) {
+            _uiState.update {
+                it.copy(
+                    progressSaveErrorMessage = "Рост должен быть больше 0.",
+                    progressSaveInfoMessage = null
+                )
+            }
+            return
+        }
+
+        val bmi = round((weight / heightMeters.pow(2)) * 100.0) / 100.0
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isProgressSaving = true,
+                    bmiValue = bmi,
+                    progressSaveErrorMessage = null,
+                    progressSaveInfoMessage = null
+                )
+            }
+
+            runCatching {
+                clientServicesRepository.createMyProgress(
+                    weight = weight,
+                    height = heightCm,
+                    bmi = bmi
+                )
+            }.onSuccess { progress ->
+                _uiState.update {
+                    it.copy(
+                        isProgressSaving = false,
+                        bmiValue = progress.bmi,
+                        progressSaveInfoMessage = "Данные сохранены.",
+                        progressHistory = (it.progressHistory + progress)
+                            .distinctBy { item -> item.id }
+                            .sortedBy { item -> item.recordedAt }
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isProgressSaving = false,
+                        progressSaveErrorMessage =
+                            throwable.message ?: "Не удалось сохранить прогресс веса."
+                    )
+                }
+            }
+        }
+    }
+
+    fun refreshProgressHistory() {
+        loadProgressHistory()
     }
 
     fun onFirstNameChanged(value: String) {
@@ -519,6 +651,42 @@ class ClientHomeViewModel(
                     }
                 }
         }
+    }
+
+    private fun loadProgressHistory() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isProgressLoading = true,
+                    progressLoadErrorMessage = null
+                )
+            }
+            runCatching { clientServicesRepository.getMyProgress() }
+                .onSuccess { progress ->
+                    _uiState.update {
+                        it.copy(
+                            isProgressLoading = false,
+                            progressHistory = progress.sortedBy { item -> item.recordedAt }
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isProgressLoading = false,
+                            progressLoadErrorMessage =
+                                throwable.message ?: "Не удалось загрузить динамику веса."
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun String.toPositiveNumberOrNull(): Double? {
+        return trim()
+            .replace(',', '.')
+            .toDoubleOrNull()
+            ?.takeIf { it > 0.0 }
     }
 
     private fun loadGyms() {
