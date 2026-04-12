@@ -14,5 +14,7 @@ interface ClientServicesRepository {
     suspend fun activatePackage(userTrainerPackageId: String): ClientTrainerPackage
     suspend fun getMyProgress(): List<ClientProgress>
     suspend fun getMyBookings(): ClientBookings
+    suspend fun createMyBulkBookings(trainerSlotIds: List<String>): Int
+    suspend fun cancelBooking(bookingId: String)
     suspend fun createMyProgress(weight: Double, height: Double, bmi: Double?): ClientProgress
 }

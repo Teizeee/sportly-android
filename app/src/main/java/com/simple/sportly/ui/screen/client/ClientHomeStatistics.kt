@@ -3,6 +3,7 @@ package com.simple.sportly.ui.screen.client
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,14 +21,22 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,11 +45,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
@@ -63,12 +76,18 @@ import com.simple.sportly.domain.model.ClientMembershipStatus
 import com.simple.sportly.domain.model.ClientProgress
 import com.simple.sportly.domain.model.ClientTrainerPackage
 import com.simple.sportly.domain.model.ClientTrainerPackageStatus
+import com.simple.sportly.domain.model.TrainerSlot
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 
 @Composable
 internal fun StatisticsTab(
@@ -189,6 +208,7 @@ internal fun MyTrainingsStatisticsPage(
     pastBookings: List<ClientBooking>,
     isLoading: Boolean,
     errorMessage: String?,
+    cancellingBookingId: String?,
     onBackClick: () -> Unit,
     onRetryClick: () -> Unit,
     onTabSelected: (MyTrainingsTab) -> Unit,
@@ -196,11 +216,14 @@ internal fun MyTrainingsStatisticsPage(
     onLeaveReviewClick: (ClientBooking) -> Unit
 ) {
     val listToShow = if (selectedTab == MyTrainingsTab.Upcoming) upcomingBookings else pastBookings
+    var pendingCancelBooking by remember { mutableStateOf<ClientBooking?>(null) }
+    var showTooLateCancelDialog by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 10.dp, vertical = 10.dp)
+            .padding(bottom = 24.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -241,57 +264,89 @@ internal fun MyTrainingsStatisticsPage(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        when {
-            isLoading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AccentDark)
-                }
-            }
-
-            !errorMessage.isNullOrBlank() -> {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(onClick = onRetryClick) {
-                        Text("Повторить")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            when {
+                isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = AccentDark)
                     }
                 }
-            }
 
-            listToShow.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = if (selectedTab == MyTrainingsTab.Upcoming) {
-                            "Нет предстоящих тренировок"
-                        } else {
-                            "Нет прошедших тренировок"
-                        },
-                        color = MainText,
-                        fontFamily = FontFamily.Serif
-                    )
+                !errorMessage.isNullOrBlank() -> {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = onRetryClick) {
+                            Text("Повторить")
+                        }
+                    }
                 }
-            }
 
-            else -> {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(listToShow, key = { it.id }) { booking ->
-                        MyTrainingCard(
-                            booking = booking,
-                            isUpcomingTab = selectedTab == MyTrainingsTab.Upcoming,
-                            onCancelClick = onCancelClick,
-                            onLeaveReviewClick = onLeaveReviewClick
+                listToShow.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (selectedTab == MyTrainingsTab.Upcoming) {
+                                "Нет предстоящих тренировок"
+                            } else {
+                                "Нет прошедших тренировок"
+                            },
+                            color = MainText,
+                            fontFamily = FontFamily.Serif
                         )
+                    }
+                }
+
+                else -> {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(listToShow, key = { it.id }) { booking ->
+                            MyTrainingCard(
+                                booking = booking,
+                                isUpcomingTab = selectedTab == MyTrainingsTab.Upcoming,
+                                cancellingBookingId = cancellingBookingId,
+                                onCancelClick = { clicked ->
+                                    if (isCancellationAllowed(clicked)) {
+                                        pendingCancelBooking = clicked
+                                    } else {
+                                        showTooLateCancelDialog = true
+                                    }
+                                },
+                                onLeaveReviewClick = onLeaveReviewClick
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    if (pendingCancelBooking != null) {
+        ActivationConfirmDialog(
+            message = "\u0412\u044b \u0442\u043e\u0447\u043d\u043e \u0445\u043e\u0442\u0438\u0442\u0435 \u043e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u0437\u0430\u043d\u044f\u0442\u0438\u0435?",
+            onConfirm = {
+                val booking = pendingCancelBooking ?: return@ActivationConfirmDialog
+                pendingCancelBooking = null
+                onCancelClick(booking)
+            },
+            onDismiss = { pendingCancelBooking = null }
+        )
+    }
+
+    if (showTooLateCancelDialog) {
+        InfoAlertDialog(
+            message = "\u041d\u0435\u043b\u044c\u0437\u044f \u043e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u0442\u0440\u0435\u043d\u0438\u0440\u043e\u0432\u043a\u0443 \u043f\u043e\u0437\u0436\u0435 \u0447\u0435\u043c \u0437\u0430 2 \u0447\u0430\u0441\u0430 \u0434\u043e \u0435\u0451 \u043d\u0430\u0447\u0430\u043b\u0430!",
+            onDismiss = { showTooLateCancelDialog = false }
+        )
     }
 }
 
@@ -327,6 +382,7 @@ private fun MyTrainingsTabButton(
 private fun MyTrainingCard(
     booking: ClientBooking,
     isUpcomingTab: Boolean,
+    cancellingBookingId: String?,
     onCancelClick: (ClientBooking) -> Unit,
     onLeaveReviewClick: (ClientBooking) -> Unit
 ) {
@@ -342,6 +398,8 @@ private fun MyTrainingCard(
     ).joinToString(" ").ifBlank {
         ""
     }
+
+    val isCancelling = cancellingBookingId == booking.id
 
     Card(
         colors = CardDefaults.cardColors(containerColor = CardBg),
@@ -383,11 +441,12 @@ private fun MyTrainingCard(
                 if (isUpcomingTab) {
                     TextButton(
                         onClick = { onCancelClick(booking) },
+                        enabled = !isCancelling,
                         colors = ButtonDefaults.textButtonColors(contentColor = MainText),
                         contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
                     ) {
                         Text(
-                            text = "Отменить",
+                            text = if (isCancelling) "\u041e\u0442\u043c\u0435\u043d\u0430..." else "\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c",
                             fontFamily = FontFamily.Serif,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
@@ -438,12 +497,386 @@ private fun MyTrainingCard(
     }
 }
 
+private fun isCancellationAllowed(booking: ClientBooking): Boolean {
+    val bookingStart = parseBookingStartDateTime(booking) ?: return false
+    val now = LocalDateTime.now()
+    return !bookingStart.isBefore(now.plusHours(2))
+}
+
+private fun parseBookingStartDateTime(booking: ClientBooking): LocalDateTime? {
+    return runCatching {
+        val date = LocalDate.parse(booking.date)
+        val time = runCatching {
+            LocalTime.parse(booking.startTime, DateTimeFormatter.ISO_LOCAL_TIME)
+        }.getOrElse {
+            LocalTime.parse(booking.startTime.take(5), DateTimeFormatter.ofPattern("HH:mm"))
+        }
+        LocalDateTime.of(date, time)
+    }.getOrNull()
+}
+
+@Composable
+private fun InfoAlertDialog(
+    message: String,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = ScreenBg),
+            shape = RoundedCornerShape(2.dp),
+            border = BorderStroke(2.dp, Color.Black),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = message,
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    textAlign = TextAlign.Start,
+                    style = MaterialTheme.typography.headlineLarge
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(30.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentDark,
+                        contentColor = ScreenBg
+                    ),
+                    modifier = Modifier
+                        .size(width = 180.dp, height = 58.dp)
+                ) {
+                    Text(
+                        text = "\u041e\u043a",
+                        fontFamily = FontFamily.Serif,
+                        style = MaterialTheme.typography.headlineMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun TrainerReviewFormPage(
+    booking: ClientBooking?,
+    rating: Int,
+    comment: String,
+    leaveGymReview: Boolean,
+    isSubmitting: Boolean,
+    errorMessage: String?,
+    onCloseClick: () -> Unit,
+    onRatingChange: (Int) -> Unit,
+    onCommentChange: (String) -> Unit,
+    onLeaveGymReviewChange: (Boolean) -> Unit,
+    onSubmitClick: () -> Unit
+) {
+    if (booking == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            TextButton(onClick = onCloseClick) {
+                Text("Закрыть")
+            }
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onClick = onCloseClick) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Закрыть",
+                    tint = MainText
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Как вам тренировка\nс ${booking.fullTrainerName()}?",
+            color = MainText,
+            fontFamily = FontFamily.Serif,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+        RatingSelector(
+            rating = rating,
+            onRatingChange = onRatingChange,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+        ReviewCommentInput(
+            comment = comment,
+            onCommentChange = onCommentChange
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Оставить отзыв на зал?",
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Checkbox(
+                checked = leaveGymReview,
+                onCheckedChange = onLeaveGymReviewChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = AccentDark,
+                    uncheckedColor = AccentDark
+                )
+            )
+        }
+
+        if (!errorMessage.isNullOrBlank()) {
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = onSubmitClick,
+            enabled = rating in 1..5 && !isSubmitting,
+            shape = RoundedCornerShape(26.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentDark,
+                contentColor = ScreenBg
+            ),
+            modifier = Modifier
+                .size(width = 160.dp, height = 52.dp)
+                .align(Alignment.CenterHorizontally)
+        ) {
+            if (isSubmitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = ScreenBg,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = "Отправить",
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun GymReviewFormPage(
+    booking: ClientBooking?,
+    rating: Int,
+    comment: String,
+    isSubmitting: Boolean,
+    errorMessage: String?,
+    onCloseClick: () -> Unit,
+    onRatingChange: (Int) -> Unit,
+    onCommentChange: (String) -> Unit,
+    onSubmitClick: () -> Unit
+) {
+    if (booking == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            TextButton(onClick = onCloseClick) {
+                Text("Закрыть")
+            }
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onClick = onCloseClick) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Закрыть",
+                    tint = MainText
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = "Как вам зал ${booking.gymTitle}?",
+            color = MainText,
+            fontFamily = FontFamily.Serif,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+        RatingSelector(
+            rating = rating,
+            onRatingChange = onRatingChange,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+        ReviewCommentInput(
+            comment = comment,
+            onCommentChange = onCommentChange
+        )
+
+        if (!errorMessage.isNullOrBlank()) {
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        Button(
+            onClick = onSubmitClick,
+            enabled = rating in 1..5 && !isSubmitting,
+            shape = RoundedCornerShape(26.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentDark,
+                contentColor = ScreenBg
+            ),
+            modifier = Modifier
+                .size(width = 160.dp, height = 52.dp)
+                .align(Alignment.CenterHorizontally)
+        ) {
+            if (isSubmitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = ScreenBg,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = "Отправить",
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RatingSelector(
+    rating: Int,
+    onRatingChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(5) { index ->
+            val starIndex = index + 1
+            Icon(
+                imageVector = if (starIndex <= rating) Icons.Default.Star else Icons.Default.StarBorder,
+                contentDescription = "Оценка $starIndex",
+                tint = AccentDark,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clickable { onRatingChange(starIndex) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewCommentInput(
+    comment: String,
+    onCommentChange: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        TextField(
+            value = comment,
+            onValueChange = { onCommentChange(it.take(255)) },
+            minLines = 5,
+            maxLines = 6,
+            placeholder = {
+                Text(
+                    text = "Оставьте комментарий",
+                    color = MainText.copy(alpha = 0.45f),
+                    fontFamily = FontFamily.Serif
+                )
+            },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                color = MainText,
+                fontFamily = FontFamily.Serif
+            ),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = ScreenBg,
+                unfocusedContainerColor = ScreenBg,
+                disabledContainerColor = ScreenBg,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                cursorColor = MainText
+            ),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    color = MainText.copy(alpha = 0.8f),
+                    shape = RoundedCornerShape(12.dp)
+                )
+        )
+        Text(
+            text = "${comment.length}/255",
+            color = MainText.copy(alpha = 0.55f),
+            fontFamily = FontFamily.Serif,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier
+                .align(Alignment.End)
+                .padding(top = 4.dp, end = 6.dp)
+        )
+    }
+}
+
+private fun ClientBooking.fullTrainerName(): String {
+    return listOfNotNull(
+        trainerFirstName.takeIf { it.isNotBlank() },
+        trainerLastName.takeIf { it.isNotBlank() },
+        trainerPatronymic?.takeIf { it.isNotBlank() }
+    ).joinToString(" ").ifBlank { "тренером" }
+}
+
 private fun ClientBookingStatus.toStatusText(): String {
     return when (this) {
-        ClientBookingStatus.CREATED -> "Запланирована"
-        ClientBookingStatus.VISITED -> "Посещено"
-        ClientBookingStatus.NOT_VISITED -> "Отсутствовал"
-        ClientBookingStatus.CANCELLED -> "Отменена"
+        ClientBookingStatus.CREATED -> "\u0417\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u0430"
+        ClientBookingStatus.VISITED -> "\u041f\u043e\u0441\u0435\u0449\u0435\u043d\u043e"
+        ClientBookingStatus.NOT_VISITED -> "\u041e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u043e\u0432\u0430\u043b"
+        ClientBookingStatus.CANCELLED -> "\u041e\u0442\u043c\u0435\u043d\u0435\u043d\u0430"
     }
 }
 
@@ -461,7 +894,7 @@ private fun formatBookingDateTime(
     } else {
         date
     }
-    return "$dateLabel • ${formatBookingTime(startTime)}-${formatBookingTime(endTime)}"
+    return "$dateLabel \u2022 ${formatBookingTime(startTime)}-${formatBookingTime(endTime)}"
 }
 
 private fun formatBookingTime(value: String): String {
@@ -474,6 +907,34 @@ private fun formatBookingTime(value: String): String {
             value.take(5)
         }
     }
+}
+
+private fun formatSlotTimeForBooking(value: String): String {
+    return runCatching {
+        LocalDateTime.parse(value).format(DateTimeFormatter.ofPattern("HH:mm"))
+    }.getOrElse {
+        runCatching {
+            OffsetDateTime.parse(value).format(DateTimeFormatter.ofPattern("HH:mm"))
+        }.getOrElse {
+            value.substringAfter('T', value).take(5)
+        }
+    }
+}
+
+private fun formatBookingDateWithWeekday(date: LocalDate): String {
+    val locale = Locale("ru")
+    val weekDay = date.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, locale)
+    val day = date.dayOfMonth
+    val month = date.month.getDisplayName(java.time.format.TextStyle.FULL, locale)
+    return "$weekDay, $day $month"
+}
+
+private fun LocalDate.toEpochMillisForBooking(): Long {
+    return atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+}
+
+private fun Long.toLocalDateForBooking(): LocalDate {
+    return Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 }
 
 @Composable
@@ -749,7 +1210,8 @@ internal fun PackagesStatisticsPage(
     activatingPackageId: String?,
     onBackClick: () -> Unit,
     onRetryClick: () -> Unit,
-    onActivateClick: (String) -> Unit
+    onActivateClick: (String) -> Unit,
+    onBookClick: (ClientTrainerPackage) -> Unit
 ) {
     val hasActivePackage = packages.any { it.status == ClientTrainerPackageStatus.ACTIVE }
     var pendingActivationPackageId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -819,7 +1281,8 @@ internal fun PackagesStatisticsPage(
                             packageItem = packageItem,
                             hasActivePackage = hasActivePackage,
                             isActivating = activatingPackageId == packageItem.id,
-                            onActivateClick = { pendingActivationPackageId = packageItem.id }
+                            onActivateClick = { pendingActivationPackageId = packageItem.id },
+                            onBookClick = { onBookClick(packageItem) }
                         )
                     }
                 }
@@ -845,7 +1308,8 @@ private fun PackageCard(
     packageItem: ClientTrainerPackage,
     hasActivePackage: Boolean,
     isActivating: Boolean,
-    onActivateClick: () -> Unit
+    onActivateClick: () -> Unit,
+    onBookClick: () -> Unit
 ) {
     val statusText = if (packageItem.status == ClientTrainerPackageStatus.ACTIVE) "Активно" else "Не активно"
     val statusColor = if (packageItem.status == ClientTrainerPackageStatus.ACTIVE) {
@@ -854,7 +1318,7 @@ private fun PackageCard(
         Color(0xFFD4362A)
     }
     val canActivate = !hasActivePackage && packageItem.status == ClientTrainerPackageStatus.PURCHASED
-    val canBook = packageItem.status == ClientTrainerPackageStatus.ACTIVE
+    val canBook = packageItem.status == ClientTrainerPackageStatus.ACTIVE && packageItem.sessionsLeft > 0
     val trainerName = listOfNotNull(
         packageItem.trainerLastName?.takeIf { it.isNotBlank() },
         packageItem.trainerFirstName?.takeIf { it.isNotBlank() },
@@ -916,7 +1380,7 @@ private fun PackageCard(
                         .padding(top = 8.dp)
                 )
                 Button(
-                    onClick = {},
+                    onClick = onBookClick,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AccentDark,
@@ -954,6 +1418,338 @@ private fun PackageCard(
                         Text("Активировать", fontFamily = FontFamily.Serif)
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PackageBookingStatisticsPage(
+    packageItem: ClientTrainerPackage?,
+    selectedDate: LocalDate,
+    availableSlots: List<TrainerSlot>,
+    selectedSlots: List<PackageBookingSelection>,
+    isSlotsLoading: Boolean,
+    isSubmitting: Boolean,
+    errorMessage: String?,
+    infoMessage: String?,
+    onBackClick: () -> Unit,
+    onDateSelected: (LocalDate) -> Unit,
+    onSlotClick: (TrainerSlot) -> Unit,
+    onRemoveSelectedClick: (String) -> Unit,
+    onRetrySlotsClick: () -> Unit,
+    onSubmitClick: () -> Unit
+) {
+    if (packageItem == null) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Пакет не выбран.",
+                color = MainText,
+                fontFamily = FontFamily.Serif
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(onClick = onBackClick) {
+                Text("Назад")
+            }
+        }
+        return
+    }
+
+    val trainerName = listOfNotNull(
+        packageItem.trainerFirstName?.takeIf { it.isNotBlank() },
+        packageItem.trainerLastName?.takeIf { it.isNotBlank() },
+        packageItem.trainerPatronymic?.takeIf { it.isNotBlank() }
+    ).joinToString(" ").ifBlank { packageItem.packageName }
+    val remainingSessions = (packageItem.sessionsLeft - selectedSlots.size).coerceAtLeast(0)
+
+    val selectedDateMillis = selectedDate.toEpochMillisForBooking()
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDateMillis)
+
+    LaunchedEffect(selectedDate) {
+        if (datePickerState.selectedDateMillis != selectedDateMillis) {
+            datePickerState.selectedDateMillis = selectedDateMillis
+        }
+    }
+
+    LaunchedEffect(datePickerState) {
+        snapshotFlow { datePickerState.selectedDateMillis }
+            .filterNotNull()
+            .map { millis -> millis.toLocalDateForBooking() }
+            .distinctUntilChanged()
+            .collect(onDateSelected)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .padding(bottom = 24.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowLeft,
+                    contentDescription = "Назад",
+                    tint = MainText
+                )
+            }
+            Column {
+                Text(
+                    text = trainerName,
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Осталось ${remainingSessions} занятий",
+                    color = MainText.copy(alpha = 0.75f),
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CardBg),
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            DatePicker(
+                state = datePickerState,
+                modifier = Modifier.fillMaxWidth(),
+                title = null,
+                headline = null,
+                showModeToggle = false,
+                colors = androidx.compose.material3.DatePickerDefaults.colors(
+                    containerColor = CardBg,
+                    titleContentColor = MainText,
+                    headlineContentColor = MainText,
+                    weekdayContentColor = MainText,
+                    subheadContentColor = MainText,
+                    yearContentColor = MainText,
+                    currentYearContentColor = AccentDark,
+                    selectedYearContainerColor = AccentDark,
+                    selectedYearContentColor = ScreenBg,
+                    dayContentColor = MainText,
+                    disabledDayContentColor = MainText.copy(alpha = 0.35f),
+                    selectedDayContainerColor = AccentDark,
+                    selectedDayContentColor = ScreenBg,
+                    todayContentColor = AccentDark,
+                    todayDateBorderColor = AccentDark,
+                    navigationContentColor = MainText
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = formatBookingDateWithWeekday(selectedDate),
+            color = MainText,
+            fontFamily = FontFamily.Serif,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (isSlotsLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = AccentDark)
+            }
+        } else if (availableSlots.isEmpty()) {
+            Text(
+                text = "На выбранную дату нет доступных слотов.",
+                color = MainText.copy(alpha = 0.75f),
+                fontFamily = FontFamily.Serif
+            )
+        } else {
+            val slotsPerRow = 4
+            val rows = availableSlots.chunked(slotsPerRow)
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rows.forEach { rowSlots ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        rowSlots.forEach { slot ->
+                            val selected = slot.id?.let { slotId ->
+                                selectedSlots.any { selectedSlot -> selectedSlot.slotId == slotId }
+                            } ?: false
+
+                            Button(
+                                onClick = { onSlotClick(slot) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (selected) AccentDark else CardBg,
+                                    contentColor = if (selected) ScreenBg else MainText
+                                ),
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = formatSlotTimeForBooking(slot.startTime),
+                                    fontFamily = FontFamily.Serif,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                        repeat(slotsPerRow - rowSlots.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!errorMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                fontFamily = FontFamily.Serif
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            TextButton(onClick = onRetrySlotsClick) {
+                Text("Повторить")
+            }
+        }
+
+        if (!infoMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = infoMessage,
+                color = AccentDark,
+                fontFamily = FontFamily.Serif
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CardBg),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Выбранные занятия",
+                        color = MainText,
+                        fontFamily = FontFamily.Serif,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(
+                        onClick = { selectedSlots.forEach { onRemoveSelectedClick(it.slotId) } },
+                        colors = ButtonDefaults.textButtonColors(contentColor = AccentDark)
+                    ) {
+                        Text(
+                            text = "Очистить все",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                if (selectedSlots.isEmpty()) {
+                    Text(
+                        text = "Слоты не выбраны",
+                        color = MainText.copy(alpha = 0.72f),
+                        fontFamily = FontFamily.Serif
+                    )
+                } else {
+                    selectedSlots.forEach { selectedSlot ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = ScreenBg.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, MainText.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = formatBookingDateWithWeekday(selectedSlot.date),
+                                        color = MainText,
+                                        fontFamily = FontFamily.Serif,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "${formatSlotTimeForBooking(selectedSlot.startTime)}-${formatSlotTimeForBooking(selectedSlot.endTime)}",
+                                        color = MainText,
+                                        fontFamily = FontFamily.Serif,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
+                                IconButton(onClick = { onRemoveSelectedClick(selectedSlot.slotId) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Удалить",
+                                        tint = MainText
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+        Button(
+            onClick = onSubmitClick,
+            enabled = selectedSlots.isNotEmpty() && !isSubmitting,
+            shape = RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = AccentDark,
+                contentColor = ScreenBg
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        ) {
+            if (isSubmitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = ScreenBg,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = "Записаться  ${selectedSlots.size} из ${packageItem.sessionsLeft}",
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
@@ -1372,4 +2168,3 @@ private fun String.toUiDate(): String {
         LocalDate.parse(this).format(DateTimeFormatter.ofPattern("dd.MM.yy", Locale.forLanguageTag("ru")))
     }.getOrElse { this }
 }
-

@@ -34,3 +34,21 @@ data class GymReviewResponseDto(
     @SerializedName("author")
     val author: ReviewUserInfoDto
 )
+
+data class TrainerReviewCreateDto(
+    @SerializedName("trainer_id")
+    val trainerId: String,
+    @SerializedName("rating")
+    val rating: Int,
+    @SerializedName("comment")
+    val comment: String?
+)
+
+data class GymReviewCreateDto(
+    @SerializedName("gym_id")
+    val gymId: String,
+    @SerializedName("rating")
+    val rating: Int,
+    @SerializedName("comment")
+    val comment: String?
+)

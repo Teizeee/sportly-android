@@ -1,6 +1,7 @@
 package com.simple.sportly.data.repository
 
 import com.simple.sportly.data.remote.api.review.GymReviewsApi
+import com.simple.sportly.data.remote.dto.review.GymReviewCreateDto
 import com.simple.sportly.data.remote.dto.review.GymReviewResponseDto
 import com.simple.sportly.domain.model.GymReview
 import com.simple.sportly.domain.repository.GymReviewsRepository
@@ -10,6 +11,20 @@ class GymReviewsRepositoryImpl(
 ) : GymReviewsRepository {
     override suspend fun getGymReviews(gymId: String): List<GymReview> {
         return gymReviewsApi.getGymReviews(gymId).map { it.toDomain() }
+    }
+
+    override suspend fun createGymReview(
+        gymId: String,
+        rating: Int,
+        comment: String?
+    ) {
+        gymReviewsApi.createGymReview(
+            payload = GymReviewCreateDto(
+                gymId = gymId,
+                rating = rating,
+                comment = comment
+            )
+        )
     }
 
     private fun GymReviewResponseDto.toDomain(): GymReview {

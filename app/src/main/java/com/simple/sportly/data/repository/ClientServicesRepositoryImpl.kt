@@ -2,6 +2,7 @@ package com.simple.sportly.data.repository
 
 import com.simple.sportly.data.remote.api.client.ClientServicesApi
 import com.simple.sportly.data.remote.dto.client.ActiveClientServicesDto
+import com.simple.sportly.data.remote.dto.client.BookingBulkCreateItemDto
 import com.simple.sportly.data.remote.dto.client.ClientBookingItemDto
 import com.simple.sportly.data.remote.dto.client.ClientBookingsDto
 import com.simple.sportly.data.remote.dto.client.ClientMembershipDto
@@ -52,6 +53,18 @@ class ClientServicesRepositoryImpl(
         return clientServicesApi.getMyBookings().toDomain()
     }
 
+    override suspend fun createMyBulkBookings(trainerSlotIds: List<String>): Int {
+        return clientServicesApi.createMyBulkBookings(
+            payload = trainerSlotIds.map { trainerSlotId ->
+                BookingBulkCreateItemDto(trainerSlotId = trainerSlotId)
+            }
+        ).size
+    }
+
+    override suspend fun cancelBooking(bookingId: String) {
+        clientServicesApi.cancelBooking(bookingId)
+    }
+
     override suspend fun createMyProgress(weight: Double, height: Double, bmi: Double?): ClientProgress {
         return clientServicesApi.createMyProgress(
             request = ClientProgressCreateDto(
@@ -88,6 +101,7 @@ class ClientServicesRepositoryImpl(
         return ActivePackage(
             id = id,
             trainerPackageId = trainerPackageId,
+            trainerId = service.trainer?.id,
             trainerPackageName = service.name,
             trainerPackageDescription = service.description,
             trainerPackageSessionCount = service.sessionCount,
@@ -117,6 +131,7 @@ class ClientServicesRepositoryImpl(
         return ClientTrainerPackage(
             id = id,
             trainerPackageId = trainerPackageId,
+            trainerId = service.trainer?.id,
             packageName = service.name,
             packageDescription = service.description,
             sessionCount = service.sessionCount,
@@ -156,6 +171,7 @@ class ClientServicesRepositoryImpl(
             date = date,
             startTime = startTime,
             endTime = endTime,
+            gymId = gym.id,
             gymTitle = gym.title,
             trainerId = trainer.id,
             trainerFirstName = trainer.firstName,

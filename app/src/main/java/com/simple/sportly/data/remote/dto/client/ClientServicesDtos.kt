@@ -30,6 +30,8 @@ data class TrainerUserDto(
 )
 
 data class TrainerInfoDto(
+    @SerializedName("id")
+    val id: String?,
     @SerializedName("user")
     val user: TrainerUserDto?
 )
@@ -112,6 +114,18 @@ data class ClientBookingsDto(
     val upcoming: List<ClientBookingItemDto>,
     @SerializedName("past")
     val past: List<ClientBookingItemDto>
+)
+
+data class BookingBulkCreateItemDto(
+    @SerializedName("trainer_slot_id")
+    val trainerSlotId: String
+)
+
+data class BookingBulkItemDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("trainer_slot_id")
+    val trainerSlotId: String
 )
 
 data class ClientBookingItemDto(

@@ -10,6 +10,8 @@ import com.simple.sportly.domain.model.Gym
 import com.simple.sportly.domain.model.GymReview
 import com.simple.sportly.domain.model.GymTrainer
 import com.simple.sportly.domain.model.TrainerReview
+import com.simple.sportly.domain.model.TrainerSlot
+import java.time.LocalDate
 
 enum class ClientTab {
     Marketplace,
@@ -27,6 +29,13 @@ enum class MyTrainingsTab {
     Upcoming,
     Past
 }
+
+data class PackageBookingSelection(
+    val slotId: String,
+    val date: LocalDate,
+    val startTime: String,
+    val endTime: String
+)
 
 data class ClientHomeUiState(
     val selectedTab: ClientTab = ClientTab.Profile,
@@ -51,9 +60,12 @@ data class ClientHomeUiState(
     val isGymTrainersOpened: Boolean = false,
     val isStatisticsMembershipsOpened: Boolean = false,
     val isStatisticsPackagesOpened: Boolean = false,
+    val isStatisticsPackageBookingOpened: Boolean = false,
     val isStatisticsWeightOpened: Boolean = false,
     val isStatisticsWeightDynamicsOpened: Boolean = false,
     val isStatisticsTrainingsOpened: Boolean = false,
+    val isTrainerReviewFormOpened: Boolean = false,
+    val isGymReviewFormOpened: Boolean = false,
     val selectedMyTrainingsTab: MyTrainingsTab = MyTrainingsTab.Upcoming,
     val activeMembership: ActiveMembership? = null,
     val activePackage: ActivePackage? = null,
@@ -67,6 +79,14 @@ data class ClientHomeUiState(
     val isPackagesLoading: Boolean = false,
     val packagesErrorMessage: String? = null,
     val activatingPackageId: String? = null,
+    val bookingPackage: ClientTrainerPackage? = null,
+    val bookingSelectedDate: LocalDate = LocalDate.now(),
+    val bookingAvailableSlots: List<TrainerSlot> = emptyList(),
+    val selectedBookingSlots: List<PackageBookingSelection> = emptyList(),
+    val isBookingSlotsLoading: Boolean = false,
+    val isBookingSubmitting: Boolean = false,
+    val bookingSlotsErrorMessage: String? = null,
+    val bookingInfoMessage: String? = null,
     val weightInput: String = "",
     val heightInput: String = "",
     val bmiValue: Double? = null,
@@ -80,6 +100,16 @@ data class ClientHomeUiState(
     val pastBookings: List<ClientBooking> = emptyList(),
     val isBookingsLoading: Boolean = false,
     val bookingsErrorMessage: String? = null,
+    val cancellingBookingId: String? = null,
+    val reviewBooking: ClientBooking? = null,
+    val trainerReviewRating: Int = 0,
+    val trainerReviewComment: String = "",
+    val shouldLeaveGymReview: Boolean = false,
+    val gymReviewRating: Int = 0,
+    val gymReviewComment: String = "",
+    val isTrainerReviewSubmitting: Boolean = false,
+    val isGymReviewSubmitting: Boolean = false,
+    val reviewErrorMessage: String? = null,
     val gymPricesTab: GymPricesTab = GymPricesTab.Memberships,
     val gymReviews: List<GymReview> = emptyList(),
     val gymReviewsForGymId: String? = null,

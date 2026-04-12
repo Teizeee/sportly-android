@@ -18,6 +18,7 @@ data class ActiveMembership(
 data class ActivePackage(
     val id: String,
     val trainerPackageId: String,
+    val trainerId: String?,
     val trainerPackageName: String,
     val trainerPackageDescription: String?,
     val trainerPackageSessionCount: Int?,
@@ -43,6 +44,7 @@ data class ClientMembership(
 data class ClientTrainerPackage(
     val id: String,
     val trainerPackageId: String,
+    val trainerId: String?,
     val packageName: String,
     val packageDescription: String?,
     val sessionCount: Int,

@@ -145,7 +145,8 @@ private fun SportlyNavGraph(
                     gymRepository = appContainer.gymRepository,
                     gymReviewsRepository = appContainer.gymReviewsRepository,
                     gymTrainersRepository = appContainer.gymTrainersRepository,
-                    trainerReviewsRepository = appContainer.trainerReviewsRepository
+                    trainerReviewsRepository = appContainer.trainerReviewsRepository,
+                    trainerSlotsRepository = appContainer.trainerSlotsRepository
                 )
             )
             val state by viewModel.uiState.collectAsState()
@@ -184,6 +185,13 @@ private fun SportlyNavGraph(
                 onCloseStatisticsPackages = viewModel::closeStatisticsPackages,
                 onRefreshPackages = viewModel::refreshPackages,
                 onActivatePackage = viewModel::activatePackage,
+                onOpenStatisticsPackageBooking = viewModel::openStatisticsPackageBooking,
+                onCloseStatisticsPackageBooking = viewModel::closeStatisticsPackageBooking,
+                onBookingDateSelected = viewModel::onBookingDateSelected,
+                onToggleBookingSlot = viewModel::toggleBookingSlot,
+                onRemoveSelectedBookingSlot = viewModel::removeSelectedBookingSlot,
+                onRetryBookingSlots = viewModel::retryLoadBookingSlots,
+                onSubmitBulkBooking = viewModel::submitBulkBooking,
                 onOpenStatisticsWeight = viewModel::openStatisticsWeight,
                 onCloseStatisticsWeight = viewModel::closeStatisticsWeight,
                 onOpenStatisticsTrainings = viewModel::openStatisticsTrainings,
@@ -192,6 +200,15 @@ private fun SportlyNavGraph(
                 onRefreshBookings = viewModel::refreshBookings,
                 onCancelBooking = viewModel::cancelBooking,
                 onLeaveBookingReview = viewModel::leaveBookingReview,
+                onCloseTrainerReviewForm = viewModel::closeTrainerReviewForm,
+                onTrainerReviewRatingChange = viewModel::onTrainerReviewRatingChanged,
+                onTrainerReviewCommentChange = viewModel::onTrainerReviewCommentChanged,
+                onShouldLeaveGymReviewChange = viewModel::onShouldLeaveGymReviewChanged,
+                onSubmitTrainerReview = viewModel::submitTrainerReview,
+                onCloseGymReviewForm = viewModel::closeGymReviewForm,
+                onGymReviewRatingChange = viewModel::onGymReviewRatingChanged,
+                onGymReviewCommentChange = viewModel::onGymReviewCommentChanged,
+                onSubmitGymReview = viewModel::submitGymReview,
                 onWeightInputChange = viewModel::onWeightInputChanged,
                 onHeightInputChange = viewModel::onHeightInputChanged,
                 onCalculateBmiClick = viewModel::calculateAndSaveBmi,

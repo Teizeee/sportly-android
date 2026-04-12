@@ -4,4 +4,9 @@ import com.simple.sportly.domain.model.TrainerReview
 
 interface TrainerReviewsRepository {
     suspend fun getTrainerReviews(trainerId: String): List<TrainerReview>
+    suspend fun createTrainerReview(
+        trainerId: String,
+        rating: Int,
+        comment: String?
+    )
 }

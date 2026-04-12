@@ -88,6 +88,7 @@ import com.simple.sportly.domain.model.GymReview
 import com.simple.sportly.domain.model.GymTrainer
 import com.simple.sportly.domain.model.GymTrainerPackage
 import com.simple.sportly.domain.model.TrainerReview
+import com.simple.sportly.domain.model.TrainerSlot
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -132,6 +133,13 @@ fun ClientHomeScreen(
     onCloseStatisticsPackages: () -> Unit,
     onRefreshPackages: () -> Unit,
     onActivatePackage: (String) -> Unit,
+    onOpenStatisticsPackageBooking: (String) -> Unit,
+    onCloseStatisticsPackageBooking: () -> Unit,
+    onBookingDateSelected: (LocalDate) -> Unit,
+    onToggleBookingSlot: (TrainerSlot) -> Unit,
+    onRemoveSelectedBookingSlot: (String) -> Unit,
+    onRetryBookingSlots: () -> Unit,
+    onSubmitBulkBooking: () -> Unit,
     onOpenStatisticsWeight: () -> Unit,
     onCloseStatisticsWeight: () -> Unit,
     onOpenStatisticsTrainings: () -> Unit,
@@ -140,6 +148,15 @@ fun ClientHomeScreen(
     onRefreshBookings: () -> Unit,
     onCancelBooking: (String) -> Unit,
     onLeaveBookingReview: (String) -> Unit,
+    onCloseTrainerReviewForm: () -> Unit,
+    onTrainerReviewRatingChange: (Int) -> Unit,
+    onTrainerReviewCommentChange: (String) -> Unit,
+    onShouldLeaveGymReviewChange: (Boolean) -> Unit,
+    onSubmitTrainerReview: () -> Unit,
+    onCloseGymReviewForm: () -> Unit,
+    onGymReviewRatingChange: (Int) -> Unit,
+    onGymReviewCommentChange: (String) -> Unit,
+    onSubmitGymReview: () -> Unit,
     onWeightInputChange: (String) -> Unit,
     onHeightInputChange: (String) -> Unit,
     onCalculateBmiClick: () -> Unit,
@@ -329,7 +346,26 @@ fun ClientHomeScreen(
                             activatingPackageId = state.activatingPackageId,
                             onBackClick = onCloseStatisticsPackages,
                             onRetryClick = onRefreshPackages,
-                            onActivateClick = onActivatePackage
+                            onActivateClick = onActivatePackage,
+                            onBookClick = { onOpenStatisticsPackageBooking(it.id) }
+                        )
+                    } else if (state.isStatisticsPackageBookingOpened) {
+                        BackHandler(onBack = onCloseStatisticsPackageBooking)
+                        PackageBookingStatisticsPage(
+                            packageItem = state.bookingPackage,
+                            selectedDate = state.bookingSelectedDate,
+                            availableSlots = state.bookingAvailableSlots,
+                            selectedSlots = state.selectedBookingSlots,
+                            isSlotsLoading = state.isBookingSlotsLoading,
+                            isSubmitting = state.isBookingSubmitting,
+                            errorMessage = state.bookingSlotsErrorMessage,
+                            infoMessage = state.bookingInfoMessage,
+                            onBackClick = onCloseStatisticsPackageBooking,
+                            onDateSelected = onBookingDateSelected,
+                            onSlotClick = onToggleBookingSlot,
+                            onRemoveSelectedClick = onRemoveSelectedBookingSlot,
+                            onRetrySlotsClick = onRetryBookingSlots,
+                            onSubmitClick = onSubmitBulkBooking
                         )
                     } else if (state.isStatisticsWeightOpened && state.isStatisticsWeightDynamicsOpened) {
                         BackHandler(onBack = onCloseWeightDynamics)
@@ -355,6 +391,34 @@ fun ClientHomeScreen(
                             onCalculateClick = onCalculateBmiClick,
                             onWeightDynamicsClick = onOpenWeightDynamics
                         )
+                    } else if (state.isTrainerReviewFormOpened) {
+                        BackHandler(onBack = onCloseTrainerReviewForm)
+                        TrainerReviewFormPage(
+                            booking = state.reviewBooking,
+                            rating = state.trainerReviewRating,
+                            comment = state.trainerReviewComment,
+                            leaveGymReview = state.shouldLeaveGymReview,
+                            isSubmitting = state.isTrainerReviewSubmitting,
+                            errorMessage = state.reviewErrorMessage,
+                            onCloseClick = onCloseTrainerReviewForm,
+                            onRatingChange = onTrainerReviewRatingChange,
+                            onCommentChange = onTrainerReviewCommentChange,
+                            onLeaveGymReviewChange = onShouldLeaveGymReviewChange,
+                            onSubmitClick = onSubmitTrainerReview
+                        )
+                    } else if (state.isGymReviewFormOpened) {
+                        BackHandler(onBack = onCloseGymReviewForm)
+                        GymReviewFormPage(
+                            booking = state.reviewBooking,
+                            rating = state.gymReviewRating,
+                            comment = state.gymReviewComment,
+                            isSubmitting = state.isGymReviewSubmitting,
+                            errorMessage = state.reviewErrorMessage,
+                            onCloseClick = onCloseGymReviewForm,
+                            onRatingChange = onGymReviewRatingChange,
+                            onCommentChange = onGymReviewCommentChange,
+                            onSubmitClick = onSubmitGymReview
+                        )
                     } else if (state.isStatisticsTrainingsOpened) {
                         BackHandler(onBack = onCloseStatisticsTrainings)
                         MyTrainingsStatisticsPage(
@@ -363,6 +427,7 @@ fun ClientHomeScreen(
                             pastBookings = state.pastBookings,
                             isLoading = state.isBookingsLoading,
                             errorMessage = state.bookingsErrorMessage,
+                            cancellingBookingId = state.cancellingBookingId,
                             onBackClick = onCloseStatisticsTrainings,
                             onRetryClick = onRefreshBookings,
                             onTabSelected = onSelectMyTrainingsTab,

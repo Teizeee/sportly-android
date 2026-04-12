@@ -13,6 +13,7 @@ import com.simple.sportly.domain.model.ClientTrainerPackageStatus
 import com.simple.sportly.domain.model.Gym
 import com.simple.sportly.domain.model.GymReview
 import com.simple.sportly.domain.model.GymTrainer
+import com.simple.sportly.domain.model.TrainerSlot
 import com.simple.sportly.domain.model.TrainerReview
 import com.simple.sportly.domain.repository.ClientServicesRepository
 import com.simple.sportly.domain.repository.GymRepository
@@ -20,6 +21,7 @@ import com.simple.sportly.domain.repository.GymReviewsRepository
 import com.simple.sportly.domain.repository.GymTrainersRepository
 import com.simple.sportly.domain.repository.ProfileRepository
 import com.simple.sportly.domain.repository.TrainerReviewsRepository
+import com.simple.sportly.domain.repository.TrainerSlotsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,7 +40,8 @@ class ClientHomeViewModel(
     private val gymRepository: GymRepository,
     private val gymReviewsRepository: GymReviewsRepository,
     private val gymTrainersRepository: GymTrainersRepository,
-    private val trainerReviewsRepository: TrainerReviewsRepository
+    private val trainerReviewsRepository: TrainerReviewsRepository,
+    private val trainerSlotsRepository: TrainerSlotsRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ClientHomeUiState())
     val uiState: StateFlow<ClientHomeUiState> = _uiState.asStateFlow()
@@ -62,6 +65,11 @@ class ClientHomeViewModel(
                 } else {
                     false
                 },
+                isStatisticsPackageBookingOpened = if (tab == ClientTab.Statistics) {
+                    it.isStatisticsPackageBookingOpened
+                } else {
+                    false
+                },
                 isStatisticsWeightOpened = if (tab == ClientTab.Statistics) {
                     it.isStatisticsWeightOpened
                 } else {
@@ -74,6 +82,16 @@ class ClientHomeViewModel(
                 },
                 isStatisticsTrainingsOpened = if (tab == ClientTab.Statistics) {
                     it.isStatisticsTrainingsOpened
+                } else {
+                    false
+                },
+                isTrainerReviewFormOpened = if (tab == ClientTab.Statistics) {
+                    it.isTrainerReviewFormOpened
+                } else {
+                    false
+                },
+                isGymReviewFormOpened = if (tab == ClientTab.Statistics) {
+                    it.isGymReviewFormOpened
                 } else {
                     false
                 },
@@ -97,9 +115,12 @@ class ClientHomeViewModel(
             it.copy(
                 isStatisticsMembershipsOpened = true,
                 isStatisticsPackagesOpened = false,
+                isStatisticsPackageBookingOpened = false,
                 isStatisticsWeightOpened = false,
                 isStatisticsWeightDynamicsOpened = false,
-                isStatisticsTrainingsOpened = false
+                isStatisticsTrainingsOpened = false,
+                isTrainerReviewFormOpened = false,
+                isGymReviewFormOpened = false
             )
         }
         if (_uiState.value.memberships.isEmpty() && !_uiState.value.isMembershipsLoading) {
@@ -116,9 +137,12 @@ class ClientHomeViewModel(
             it.copy(
                 isStatisticsMembershipsOpened = false,
                 isStatisticsPackagesOpened = true,
+                isStatisticsPackageBookingOpened = false,
                 isStatisticsWeightOpened = false,
                 isStatisticsWeightDynamicsOpened = false,
-                isStatisticsTrainingsOpened = false
+                isStatisticsTrainingsOpened = false,
+                isTrainerReviewFormOpened = false,
+                isGymReviewFormOpened = false
             )
         }
         if (_uiState.value.packages.isEmpty() && !_uiState.value.isPackagesLoading) {
@@ -127,7 +151,17 @@ class ClientHomeViewModel(
     }
 
     fun closeStatisticsPackages() {
-        _uiState.update { it.copy(isStatisticsPackagesOpened = false) }
+        _uiState.update {
+            it.copy(
+                isStatisticsPackagesOpened = false,
+                isStatisticsPackageBookingOpened = false,
+                bookingPackage = null,
+                bookingAvailableSlots = emptyList(),
+                selectedBookingSlots = emptyList(),
+                bookingSlotsErrorMessage = null,
+                bookingInfoMessage = null
+            )
+        }
     }
 
     fun openStatisticsWeight() {
@@ -136,6 +170,9 @@ class ClientHomeViewModel(
                 isStatisticsWeightOpened = true,
                 isStatisticsWeightDynamicsOpened = false,
                 isStatisticsTrainingsOpened = false,
+                isStatisticsPackageBookingOpened = false,
+                isTrainerReviewFormOpened = false,
+                isGymReviewFormOpened = false,
                 progressSaveErrorMessage = null
             )
         }
@@ -165,8 +202,11 @@ class ClientHomeViewModel(
                 isStatisticsTrainingsOpened = true,
                 isStatisticsMembershipsOpened = false,
                 isStatisticsPackagesOpened = false,
+                isStatisticsPackageBookingOpened = false,
                 isStatisticsWeightOpened = false,
-                isStatisticsWeightDynamicsOpened = false
+                isStatisticsWeightDynamicsOpened = false,
+                isTrainerReviewFormOpened = false,
+                isGymReviewFormOpened = false
             )
         }
         if (
@@ -179,7 +219,22 @@ class ClientHomeViewModel(
     }
 
     fun closeStatisticsTrainings() {
-        _uiState.update { it.copy(isStatisticsTrainingsOpened = false) }
+        _uiState.update {
+            it.copy(
+                isStatisticsTrainingsOpened = false,
+                isTrainerReviewFormOpened = false,
+                isGymReviewFormOpened = false,
+                reviewBooking = null,
+                trainerReviewRating = 0,
+                trainerReviewComment = "",
+                shouldLeaveGymReview = false,
+                gymReviewRating = 0,
+                gymReviewComment = "",
+                isTrainerReviewSubmitting = false,
+                isGymReviewSubmitting = false,
+                reviewErrorMessage = null
+            )
+        }
     }
 
     fun refreshBookings() {
@@ -190,9 +245,200 @@ class ClientHomeViewModel(
         _uiState.update { it.copy(selectedMyTrainingsTab = tab) }
     }
 
-    fun cancelBooking(@Suppress("UNUSED_PARAMETER") bookingId: String) = Unit
+    fun cancelBooking(bookingId: String) {
+        if (_uiState.value.cancellingBookingId != null) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    cancellingBookingId = bookingId,
+                    bookingsErrorMessage = null
+                )
+            }
 
-    fun leaveBookingReview(@Suppress("UNUSED_PARAMETER") bookingId: String) = Unit
+            runCatching { clientServicesRepository.cancelBooking(bookingId) }
+                .onSuccess {
+                    _uiState.update { state ->
+                        state.copy(
+                            cancellingBookingId = null,
+                            upcomingBookings = state.upcomingBookings.filterNot { booking -> booking.id == bookingId },
+                            pastBookings = state.pastBookings.filterNot { booking -> booking.id == bookingId }
+                        )
+                    }
+                    loadBookings()
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            cancellingBookingId = null,
+                            bookingsErrorMessage = throwable.message ?: "Не удалось отменить тренировку."
+                        )
+                    }
+                }
+        }
+    }
+
+    fun leaveBookingReview(bookingId: String) {
+        val booking = (_uiState.value.pastBookings + _uiState.value.upcomingBookings)
+            .firstOrNull { it.id == bookingId }
+            ?: return
+
+        _uiState.update {
+            it.copy(
+                isTrainerReviewFormOpened = true,
+                isGymReviewFormOpened = false,
+                isStatisticsTrainingsOpened = false,
+                reviewBooking = booking,
+                trainerReviewRating = 0,
+                trainerReviewComment = "",
+                shouldLeaveGymReview = false,
+                gymReviewRating = 0,
+                gymReviewComment = "",
+                isTrainerReviewSubmitting = false,
+                isGymReviewSubmitting = false,
+                reviewErrorMessage = null
+            )
+        }
+    }
+
+    fun closeTrainerReviewForm() {
+        _uiState.update {
+            it.copy(
+                isTrainerReviewFormOpened = false,
+                isStatisticsTrainingsOpened = true,
+                reviewBooking = null,
+                trainerReviewRating = 0,
+                trainerReviewComment = "",
+                shouldLeaveGymReview = false,
+                isTrainerReviewSubmitting = false,
+                reviewErrorMessage = null
+            )
+        }
+    }
+
+    fun closeGymReviewForm() {
+        _uiState.update {
+            it.copy(
+                isGymReviewFormOpened = false,
+                isStatisticsTrainingsOpened = true,
+                reviewBooking = null,
+                gymReviewRating = 0,
+                gymReviewComment = "",
+                isGymReviewSubmitting = false,
+                reviewErrorMessage = null
+            )
+        }
+    }
+
+    fun onTrainerReviewRatingChanged(rating: Int) {
+        _uiState.update { it.copy(trainerReviewRating = rating.coerceIn(0, 5), reviewErrorMessage = null) }
+    }
+
+    fun onTrainerReviewCommentChanged(comment: String) {
+        _uiState.update { it.copy(trainerReviewComment = comment.take(255), reviewErrorMessage = null) }
+    }
+
+    fun onShouldLeaveGymReviewChanged(value: Boolean) {
+        _uiState.update { it.copy(shouldLeaveGymReview = value, reviewErrorMessage = null) }
+    }
+
+    fun onGymReviewRatingChanged(rating: Int) {
+        _uiState.update { it.copy(gymReviewRating = rating.coerceIn(0, 5), reviewErrorMessage = null) }
+    }
+
+    fun onGymReviewCommentChanged(comment: String) {
+        _uiState.update { it.copy(gymReviewComment = comment.take(255), reviewErrorMessage = null) }
+    }
+
+    fun submitTrainerReview() {
+        val state = _uiState.value
+        val booking = state.reviewBooking ?: return
+        if (state.isTrainerReviewSubmitting) return
+        if (state.trainerReviewRating !in 1..5) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTrainerReviewSubmitting = true, reviewErrorMessage = null) }
+            runCatching {
+                trainerReviewsRepository.createTrainerReview(
+                    trainerId = booking.trainerId,
+                    rating = state.trainerReviewRating,
+                    comment = state.trainerReviewComment.trim().ifBlank { null }
+                )
+            }.onSuccess {
+                if (state.shouldLeaveGymReview) {
+                    _uiState.update {
+                        it.copy(
+                            isTrainerReviewSubmitting = false,
+                            isTrainerReviewFormOpened = false,
+                            isGymReviewFormOpened = true,
+                            gymReviewRating = 0,
+                            gymReviewComment = "",
+                            reviewErrorMessage = null
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isTrainerReviewSubmitting = false,
+                            isTrainerReviewFormOpened = false,
+                            isStatisticsTrainingsOpened = true,
+                            reviewBooking = null,
+                            trainerReviewRating = 0,
+                            trainerReviewComment = "",
+                            shouldLeaveGymReview = false,
+                            reviewErrorMessage = null
+                        )
+                    }
+                    loadBookings()
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isTrainerReviewSubmitting = false,
+                        reviewErrorMessage = throwable.message ?: "Не удалось отправить отзыв тренеру."
+                    )
+                }
+            }
+        }
+    }
+
+    fun submitGymReview() {
+        val state = _uiState.value
+        val booking = state.reviewBooking ?: return
+        if (state.isGymReviewSubmitting) return
+        if (state.gymReviewRating !in 1..5) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isGymReviewSubmitting = true, reviewErrorMessage = null) }
+            runCatching {
+                gymReviewsRepository.createGymReview(
+                    gymId = booking.gymId,
+                    rating = state.gymReviewRating,
+                    comment = state.gymReviewComment.trim().ifBlank { null }
+                )
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isGymReviewSubmitting = false,
+                        isGymReviewFormOpened = false,
+                        isStatisticsTrainingsOpened = true,
+                        reviewBooking = null,
+                        shouldLeaveGymReview = false,
+                        gymReviewRating = 0,
+                        gymReviewComment = "",
+                        reviewErrorMessage = null
+                    )
+                }
+                loadBookings()
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isGymReviewSubmitting = false,
+                        reviewErrorMessage = throwable.message ?: "Не удалось отправить отзыв залу."
+                    )
+                }
+            }
+        }
+    }
 
     fun onWeightInputChanged(value: String) {
         _uiState.update {
@@ -744,6 +990,248 @@ class ClientHomeViewModel(
         }
     }
 
+    fun openStatisticsPackageBooking(packageId: String) {
+        val packageItem = _uiState.value.packages.firstOrNull { it.id == packageId } ?: return
+        if (packageItem.status != ClientTrainerPackageStatus.ACTIVE) return
+        if (packageItem.sessionsLeft <= 0) return
+
+        _uiState.update {
+            it.copy(
+                isStatisticsPackageBookingOpened = true,
+                isStatisticsPackagesOpened = false,
+                isStatisticsMembershipsOpened = false,
+                isStatisticsWeightOpened = false,
+                isStatisticsWeightDynamicsOpened = false,
+                isStatisticsTrainingsOpened = false,
+                isTrainerReviewFormOpened = false,
+                isGymReviewFormOpened = false,
+                bookingPackage = packageItem,
+                bookingSelectedDate = LocalDate.now(),
+                bookingAvailableSlots = emptyList(),
+                selectedBookingSlots = emptyList(),
+                isBookingSlotsLoading = false,
+                isBookingSubmitting = false,
+                bookingSlotsErrorMessage = null,
+                bookingInfoMessage = null
+            )
+        }
+
+        loadSlotsForBookingDate()
+    }
+
+    fun closeStatisticsPackageBooking() {
+        _uiState.update {
+            it.copy(
+                isStatisticsPackageBookingOpened = false,
+                isStatisticsPackagesOpened = true,
+                bookingPackage = null,
+                bookingAvailableSlots = emptyList(),
+                selectedBookingSlots = emptyList(),
+                isBookingSlotsLoading = false,
+                isBookingSubmitting = false,
+                bookingSlotsErrorMessage = null,
+                bookingInfoMessage = null
+            )
+        }
+    }
+
+    fun onBookingDateSelected(date: LocalDate) {
+        if (_uiState.value.bookingSelectedDate == date) return
+        _uiState.update {
+            it.copy(
+                bookingSelectedDate = date,
+                bookingSlotsErrorMessage = null,
+                bookingInfoMessage = null
+            )
+        }
+        loadSlotsForBookingDate()
+    }
+
+    fun retryLoadBookingSlots() {
+        loadSlotsForBookingDate()
+    }
+
+    fun toggleBookingSlot(slot: TrainerSlot) {
+        val slotId = slot.id ?: return
+        val isBookable = slot.bookingId == null || slot.bookingStatus == "CANCELLED"
+        if (!isBookable) return
+
+        val state = _uiState.value
+        val packageItem = state.bookingPackage ?: return
+
+        val existingIndex = state.selectedBookingSlots.indexOfFirst { it.slotId == slotId }
+        if (existingIndex >= 0) {
+            _uiState.update {
+                it.copy(
+                    selectedBookingSlots = it.selectedBookingSlots.filterNot { selected ->
+                        selected.slotId == slotId
+                    },
+                    bookingInfoMessage = null
+                )
+            }
+            return
+        }
+
+        if (state.selectedBookingSlots.size >= packageItem.sessionsLeft) {
+            _uiState.update {
+                it.copy(bookingInfoMessage = "Нельзя выбрать больше занятий, чем осталось в пакете.")
+            }
+            return
+        }
+
+        val bookingDate = runCatching { LocalDate.parse(slot.startTime.take(10)) }
+            .getOrDefault(state.bookingSelectedDate)
+
+        _uiState.update {
+            it.copy(
+                selectedBookingSlots = (it.selectedBookingSlots + PackageBookingSelection(
+                    slotId = slotId,
+                    date = bookingDate,
+                    startTime = slot.startTime,
+                    endTime = slot.endTime
+                )).sortedWith(
+                    compareBy<PackageBookingSelection> { selected -> selected.date }
+                        .thenBy { selected -> selected.startTime }
+                ),
+                bookingInfoMessage = null
+            )
+        }
+    }
+
+    fun removeSelectedBookingSlot(slotId: String) {
+        _uiState.update {
+            it.copy(
+                selectedBookingSlots = it.selectedBookingSlots.filterNot { selected ->
+                    selected.slotId == slotId
+                },
+                bookingInfoMessage = null
+            )
+        }
+    }
+
+    fun submitBulkBooking() {
+        val state = _uiState.value
+        val packageItem = state.bookingPackage ?: return
+        if (state.isBookingSubmitting) return
+        if (state.selectedBookingSlots.isEmpty()) {
+            _uiState.update {
+                it.copy(bookingSlotsErrorMessage = "Выберите хотя бы один слот для записи.")
+            }
+            return
+        }
+        if (state.selectedBookingSlots.size > packageItem.sessionsLeft) {
+            _uiState.update {
+                it.copy(
+                    bookingSlotsErrorMessage = "Выбрано больше слотов, чем осталось занятий в пакете."
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBookingSubmitting = true,
+                    bookingSlotsErrorMessage = null,
+                    bookingInfoMessage = null
+                )
+            }
+
+            runCatching {
+                clientServicesRepository.createMyBulkBookings(
+                    trainerSlotIds = state.selectedBookingSlots.map { it.slotId }
+                )
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        isBookingSubmitting = false,
+                        isStatisticsPackageBookingOpened = false,
+                        isStatisticsPackagesOpened = true,
+                        bookingPackage = null,
+                        bookingAvailableSlots = emptyList(),
+                        selectedBookingSlots = emptyList(),
+                        bookingInfoMessage = "Запись успешно создана."
+                    )
+                }
+                loadPackages()
+                loadActiveServices()
+                loadBookings()
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isBookingSubmitting = false,
+                        bookingSlotsErrorMessage = throwable.message ?: "Не удалось записаться на занятия."
+                    )
+                }
+            }
+        }
+    }
+
+    private fun loadSlotsForBookingDate() {
+        val state = _uiState.value
+        val packageItem = state.bookingPackage ?: return
+        val trainerId = packageItem.trainerId
+        val selectedDate = state.bookingSelectedDate
+
+        if (selectedDate.isBefore(LocalDate.now())) {
+            _uiState.update {
+                it.copy(
+                    isBookingSlotsLoading = false,
+                    bookingAvailableSlots = emptyList(),
+                    bookingSlotsErrorMessage = null,
+                    bookingInfoMessage = "Для прошедших дат запись недоступна."
+                )
+            }
+            return
+        }
+
+        if (trainerId.isNullOrBlank()) {
+            _uiState.update {
+                it.copy(
+                    bookingAvailableSlots = emptyList(),
+                    bookingSlotsErrorMessage = "Не удалось определить тренера для выбранного пакета."
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBookingSlotsLoading = true,
+                    bookingSlotsErrorMessage = null
+                )
+            }
+
+            runCatching {
+                trainerSlotsRepository.getTrainerSlotsByDate(
+                    trainerId = trainerId,
+                    date = selectedDate.toString()
+                )
+            }.onSuccess { slots ->
+                val availableSlots = slots.filter { slot ->
+                    slot.id != null && (slot.bookingId == null || slot.bookingStatus == "CANCELLED")
+                }.sortedBy { slot -> slot.startTime }
+
+                _uiState.update {
+                    it.copy(
+                        isBookingSlotsLoading = false,
+                        bookingAvailableSlots = availableSlots,
+                        bookingSlotsErrorMessage = null
+                    )
+                }
+            }.onFailure { throwable ->
+                _uiState.update {
+                    it.copy(
+                        isBookingSlotsLoading = false,
+                        bookingAvailableSlots = emptyList(),
+                        bookingSlotsErrorMessage = throwable.message ?: "Не удалось загрузить слоты тренера."
+                    )
+                }
+            }
+        }
+    }
+
     private fun loadBookings() {
         viewModelScope.launch {
             _uiState.update {
@@ -932,7 +1420,8 @@ class ClientHomeViewModel(
             gymRepository: GymRepository,
             gymReviewsRepository: GymReviewsRepository,
             gymTrainersRepository: GymTrainersRepository,
-            trainerReviewsRepository: TrainerReviewsRepository
+            trainerReviewsRepository: TrainerReviewsRepository,
+            trainerSlotsRepository: TrainerSlotsRepository
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
@@ -943,7 +1432,8 @@ class ClientHomeViewModel(
                         gymRepository = gymRepository,
                         gymReviewsRepository = gymReviewsRepository,
                         gymTrainersRepository = gymTrainersRepository,
-                        trainerReviewsRepository = trainerReviewsRepository
+                        trainerReviewsRepository = trainerReviewsRepository,
+                        trainerSlotsRepository = trainerSlotsRepository
                     ) as T
                 }
             }

@@ -11,6 +11,7 @@ data class ClientBooking(
     val date: String,
     val startTime: String,
     val endTime: String,
+    val gymId: String,
     val gymTitle: String,
     val trainerId: String,
     val trainerFirstName: String,
