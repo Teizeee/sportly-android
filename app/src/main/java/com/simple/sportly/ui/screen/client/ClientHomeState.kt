@@ -2,6 +2,7 @@ package com.simple.sportly.ui.screen.client
 
 import com.simple.sportly.domain.model.ActiveMembership
 import com.simple.sportly.domain.model.ActivePackage
+import com.simple.sportly.domain.model.ClientBooking
 import com.simple.sportly.domain.model.ClientMembership
 import com.simple.sportly.domain.model.ClientProgress
 import com.simple.sportly.domain.model.ClientTrainerPackage
@@ -20,6 +21,11 @@ enum class ClientTab {
 enum class GymPricesTab {
     Memberships,
     Packages
+}
+
+enum class MyTrainingsTab {
+    Upcoming,
+    Past
 }
 
 data class ClientHomeUiState(
@@ -47,6 +53,8 @@ data class ClientHomeUiState(
     val isStatisticsPackagesOpened: Boolean = false,
     val isStatisticsWeightOpened: Boolean = false,
     val isStatisticsWeightDynamicsOpened: Boolean = false,
+    val isStatisticsTrainingsOpened: Boolean = false,
+    val selectedMyTrainingsTab: MyTrainingsTab = MyTrainingsTab.Upcoming,
     val activeMembership: ActiveMembership? = null,
     val activePackage: ActivePackage? = null,
     val isActiveServicesLoading: Boolean = false,
@@ -68,6 +76,10 @@ data class ClientHomeUiState(
     val progressHistory: List<ClientProgress> = emptyList(),
     val isProgressLoading: Boolean = false,
     val progressLoadErrorMessage: String? = null,
+    val upcomingBookings: List<ClientBooking> = emptyList(),
+    val pastBookings: List<ClientBooking> = emptyList(),
+    val isBookingsLoading: Boolean = false,
+    val bookingsErrorMessage: String? = null,
     val gymPricesTab: GymPricesTab = GymPricesTab.Memberships,
     val gymReviews: List<GymReview> = emptyList(),
     val gymReviewsForGymId: String? = null,

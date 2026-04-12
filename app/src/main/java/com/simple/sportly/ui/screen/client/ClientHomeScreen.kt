@@ -134,6 +134,12 @@ fun ClientHomeScreen(
     onActivatePackage: (String) -> Unit,
     onOpenStatisticsWeight: () -> Unit,
     onCloseStatisticsWeight: () -> Unit,
+    onOpenStatisticsTrainings: () -> Unit,
+    onCloseStatisticsTrainings: () -> Unit,
+    onSelectMyTrainingsTab: (MyTrainingsTab) -> Unit,
+    onRefreshBookings: () -> Unit,
+    onCancelBooking: (String) -> Unit,
+    onLeaveBookingReview: (String) -> Unit,
     onWeightInputChange: (String) -> Unit,
     onHeightInputChange: (String) -> Unit,
     onCalculateBmiClick: () -> Unit,
@@ -349,6 +355,20 @@ fun ClientHomeScreen(
                             onCalculateClick = onCalculateBmiClick,
                             onWeightDynamicsClick = onOpenWeightDynamics
                         )
+                    } else if (state.isStatisticsTrainingsOpened) {
+                        BackHandler(onBack = onCloseStatisticsTrainings)
+                        MyTrainingsStatisticsPage(
+                            selectedTab = state.selectedMyTrainingsTab,
+                            upcomingBookings = state.upcomingBookings,
+                            pastBookings = state.pastBookings,
+                            isLoading = state.isBookingsLoading,
+                            errorMessage = state.bookingsErrorMessage,
+                            onBackClick = onCloseStatisticsTrainings,
+                            onRetryClick = onRefreshBookings,
+                            onTabSelected = onSelectMyTrainingsTab,
+                            onCancelClick = { onCancelBooking(it.id) },
+                            onLeaveReviewClick = { onLeaveBookingReview(it.id) }
+                        )
                     } else {
                         StatisticsTab(
                             activeMembership = state.activeMembership,
@@ -358,7 +378,8 @@ fun ClientHomeScreen(
                             onRetryClick = onRefreshActiveServices,
                             onMembershipsClick = onOpenStatisticsMemberships,
                             onPackagesClick = onOpenStatisticsPackages,
-                            onWeightClick = onOpenStatisticsWeight
+                            onWeightClick = onOpenStatisticsWeight,
+                            onMyTrainingsClick = onOpenStatisticsTrainings
                         )
                     }
                 }

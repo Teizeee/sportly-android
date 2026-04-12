@@ -106,3 +106,45 @@ data class ClientProgressDto(
     @SerializedName("recorded_at")
     val recordedAt: String
 )
+
+data class ClientBookingsDto(
+    @SerializedName("upcoming")
+    val upcoming: List<ClientBookingItemDto>,
+    @SerializedName("past")
+    val past: List<ClientBookingItemDto>
+)
+
+data class ClientBookingItemDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("status")
+    val status: String,
+    @SerializedName("date")
+    val date: String,
+    @SerializedName("start_time")
+    val startTime: String,
+    @SerializedName("end_time")
+    val endTime: String,
+    @SerializedName("gym")
+    val gym: BookingGymShortDto,
+    @SerializedName("trainer")
+    val trainer: BookingTrainerShortDto
+)
+
+data class BookingGymShortDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("title")
+    val title: String
+)
+
+data class BookingTrainerShortDto(
+    @SerializedName("id")
+    val id: String,
+    @SerializedName("first_name")
+    val firstName: String,
+    @SerializedName("last_name")
+    val lastName: String,
+    @SerializedName("patronymic")
+    val patronymic: String?
+)

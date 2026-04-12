@@ -1,6 +1,7 @@
 package com.simple.sportly.data.remote.api.client
 
 import com.simple.sportly.data.remote.dto.client.ActiveClientServicesDto
+import com.simple.sportly.data.remote.dto.client.ClientBookingsDto
 import com.simple.sportly.data.remote.dto.client.ClientMembershipDto
 import com.simple.sportly.data.remote.dto.client.ClientProgressCreateDto
 import com.simple.sportly.data.remote.dto.client.ClientProgressDto
@@ -32,6 +33,9 @@ interface ClientServicesApi {
 
     @GET("api/v1/clients/me/progress")
     suspend fun getMyProgress(): List<ClientProgressDto>
+
+    @GET("api/v1/clients/me/bookings")
+    suspend fun getMyBookings(): ClientBookingsDto
 
     @POST("api/v1/clients/me/progress")
     suspend fun createMyProgress(

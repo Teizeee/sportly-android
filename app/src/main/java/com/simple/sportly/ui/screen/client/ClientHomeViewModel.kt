@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.simple.sportly.domain.model.ActiveMembership
 import com.simple.sportly.domain.model.ActivePackage
+import com.simple.sportly.domain.model.ClientBooking
 import com.simple.sportly.domain.model.ClientMembership
 import com.simple.sportly.domain.model.ClientMembershipStatus
 import com.simple.sportly.domain.model.ClientTrainerPackage
@@ -24,6 +25,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import kotlin.math.pow
 import kotlin.math.round
 
@@ -67,6 +72,11 @@ class ClientHomeViewModel(
                 } else {
                     false
                 },
+                isStatisticsTrainingsOpened = if (tab == ClientTab.Statistics) {
+                    it.isStatisticsTrainingsOpened
+                } else {
+                    false
+                },
             )
         }
         if (tab == ClientTab.Marketplace && _uiState.value.gyms.isEmpty()) {
@@ -83,7 +93,15 @@ class ClientHomeViewModel(
     }
 
     fun openStatisticsMemberships() {
-        _uiState.update { it.copy(isStatisticsMembershipsOpened = true) }
+        _uiState.update {
+            it.copy(
+                isStatisticsMembershipsOpened = true,
+                isStatisticsPackagesOpened = false,
+                isStatisticsWeightOpened = false,
+                isStatisticsWeightDynamicsOpened = false,
+                isStatisticsTrainingsOpened = false
+            )
+        }
         if (_uiState.value.memberships.isEmpty() && !_uiState.value.isMembershipsLoading) {
             loadMemberships()
         }
@@ -94,7 +112,15 @@ class ClientHomeViewModel(
     }
 
     fun openStatisticsPackages() {
-        _uiState.update { it.copy(isStatisticsPackagesOpened = true) }
+        _uiState.update {
+            it.copy(
+                isStatisticsMembershipsOpened = false,
+                isStatisticsPackagesOpened = true,
+                isStatisticsWeightOpened = false,
+                isStatisticsWeightDynamicsOpened = false,
+                isStatisticsTrainingsOpened = false
+            )
+        }
         if (_uiState.value.packages.isEmpty() && !_uiState.value.isPackagesLoading) {
             loadPackages()
         }
@@ -109,6 +135,7 @@ class ClientHomeViewModel(
             it.copy(
                 isStatisticsWeightOpened = true,
                 isStatisticsWeightDynamicsOpened = false,
+                isStatisticsTrainingsOpened = false,
                 progressSaveErrorMessage = null
             )
         }
@@ -131,6 +158,41 @@ class ClientHomeViewModel(
     fun closeStatisticsWeightDynamics() {
         _uiState.update { it.copy(isStatisticsWeightDynamicsOpened = false) }
     }
+
+    fun openStatisticsTrainings() {
+        _uiState.update {
+            it.copy(
+                isStatisticsTrainingsOpened = true,
+                isStatisticsMembershipsOpened = false,
+                isStatisticsPackagesOpened = false,
+                isStatisticsWeightOpened = false,
+                isStatisticsWeightDynamicsOpened = false
+            )
+        }
+        if (
+            _uiState.value.upcomingBookings.isEmpty() &&
+            _uiState.value.pastBookings.isEmpty() &&
+            !_uiState.value.isBookingsLoading
+        ) {
+            loadBookings()
+        }
+    }
+
+    fun closeStatisticsTrainings() {
+        _uiState.update { it.copy(isStatisticsTrainingsOpened = false) }
+    }
+
+    fun refreshBookings() {
+        loadBookings()
+    }
+
+    fun selectMyTrainingsTab(tab: MyTrainingsTab) {
+        _uiState.update { it.copy(selectedMyTrainingsTab = tab) }
+    }
+
+    fun cancelBooking(@Suppress("UNUSED_PARAMETER") bookingId: String) = Unit
+
+    fun leaveBookingReview(@Suppress("UNUSED_PARAMETER") bookingId: String) = Unit
 
     fun onWeightInputChanged(value: String) {
         _uiState.update {
@@ -682,11 +744,52 @@ class ClientHomeViewModel(
         }
     }
 
+    private fun loadBookings() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBookingsLoading = true,
+                    bookingsErrorMessage = null
+                )
+            }
+            runCatching { clientServicesRepository.getMyBookings() }
+                .onSuccess { bookings ->
+                    _uiState.update {
+                        it.copy(
+                            isBookingsLoading = false,
+                            upcomingBookings = bookings.upcoming.sortedBy { item -> item.toBookingDateTime() },
+                            pastBookings = bookings.past.sortedByDescending { item -> item.toBookingDateTime() }
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isBookingsLoading = false,
+                            bookingsErrorMessage = throwable.message ?: "Не удалось загрузить тренировки."
+                        )
+                    }
+                }
+        }
+    }
+
     private fun String.toPositiveNumberOrNull(): Double? {
         return trim()
             .replace(',', '.')
             .toDoubleOrNull()
             ?.takeIf { it > 0.0 }
+    }
+
+    private fun ClientBooking.toBookingDateTime(): LocalDateTime {
+        val date = runCatching { LocalDate.parse(this.date, DateTimeFormatter.ISO_LOCAL_DATE) }
+            .getOrDefault(LocalDate.MIN)
+        val time = runCatching { LocalTime.parse(this.startTime, DateTimeFormatter.ISO_LOCAL_TIME) }
+            .getOrElse {
+                val normalized = this.startTime.take(5)
+                runCatching { LocalTime.parse(normalized, DateTimeFormatter.ofPattern("HH:mm")) }
+                    .getOrDefault(LocalTime.MIN)
+            }
+        return LocalDateTime.of(date, time)
     }
 
     private fun loadGyms() {

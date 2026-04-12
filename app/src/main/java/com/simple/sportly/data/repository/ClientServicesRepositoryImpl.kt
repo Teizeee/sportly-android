@@ -2,6 +2,8 @@ package com.simple.sportly.data.repository
 
 import com.simple.sportly.data.remote.api.client.ClientServicesApi
 import com.simple.sportly.data.remote.dto.client.ActiveClientServicesDto
+import com.simple.sportly.data.remote.dto.client.ClientBookingItemDto
+import com.simple.sportly.data.remote.dto.client.ClientBookingsDto
 import com.simple.sportly.data.remote.dto.client.ClientMembershipDto
 import com.simple.sportly.data.remote.dto.client.ClientProgressCreateDto
 import com.simple.sportly.data.remote.dto.client.ClientProgressDto
@@ -9,6 +11,9 @@ import com.simple.sportly.data.remote.dto.client.UserTrainerPackageDto
 import com.simple.sportly.domain.model.ActiveMembership
 import com.simple.sportly.domain.model.ActivePackage
 import com.simple.sportly.domain.model.ClientActiveServices
+import com.simple.sportly.domain.model.ClientBooking
+import com.simple.sportly.domain.model.ClientBookingStatus
+import com.simple.sportly.domain.model.ClientBookings
 import com.simple.sportly.domain.model.ClientMembership
 import com.simple.sportly.domain.model.ClientMembershipStatus
 import com.simple.sportly.domain.model.ClientProgress
@@ -41,6 +46,10 @@ class ClientServicesRepositoryImpl(
 
     override suspend fun getMyProgress(): List<ClientProgress> {
         return clientServicesApi.getMyProgress().map { it.toDomain() }
+    }
+
+    override suspend fun getMyBookings(): ClientBookings {
+        return clientServicesApi.getMyBookings().toDomain()
     }
 
     override suspend fun createMyProgress(weight: Double, height: Double, bmi: Double?): ClientProgress {
@@ -130,6 +139,28 @@ class ClientServicesRepositoryImpl(
             height = height.toDoubleOrNull() ?: 0.0,
             bmi = bmi.toDoubleOrNull() ?: 0.0,
             recordedAt = recordedAt
+        )
+    }
+
+    private fun ClientBookingsDto.toDomain(): ClientBookings {
+        return ClientBookings(
+            upcoming = upcoming.map { it.toDomain() },
+            past = past.map { it.toDomain() }
+        )
+    }
+
+    private fun ClientBookingItemDto.toDomain(): ClientBooking {
+        return ClientBooking(
+            id = id,
+            status = ClientBookingStatus.fromApi(status),
+            date = date,
+            startTime = startTime,
+            endTime = endTime,
+            gymTitle = gym.title,
+            trainerId = trainer.id,
+            trainerFirstName = trainer.firstName,
+            trainerLastName = trainer.lastName,
+            trainerPatronymic = trainer.patronymic
         )
     }
 }
