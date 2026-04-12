@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
@@ -65,19 +66,31 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.draw.clip
 import coil.compose.SubcomposeAsyncImage
 import com.simple.sportly.BuildConfig
 import com.simple.sportly.R
+import com.simple.sportly.domain.model.ActiveMembership
+import com.simple.sportly.domain.model.ActivePackage
+import com.simple.sportly.domain.model.ClientMembership
+import com.simple.sportly.domain.model.ClientMembershipStatus
+import com.simple.sportly.domain.model.ClientTrainerPackage
+import com.simple.sportly.domain.model.ClientTrainerPackageStatus
 import com.simple.sportly.domain.model.Gym
 import com.simple.sportly.domain.model.GymMembershipType
 import com.simple.sportly.domain.model.GymReview
 import com.simple.sportly.domain.model.GymTrainer
 import com.simple.sportly.domain.model.GymTrainerPackage
 import com.simple.sportly.domain.model.TrainerReview
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val ScreenBg = Color(0xFFE7E3DA)
 private val CardBg = Color(0xFFD1CAB9)
@@ -110,6 +123,15 @@ fun ClientHomeScreen(
     onMarketplaceBackFromTrainerDetailsClick: () -> Unit,
     onMarketplaceTrainerReviewsClick: () -> Unit,
     onMarketplaceBackFromTrainerReviewsClick: () -> Unit,
+    onRefreshActiveServices: () -> Unit,
+    onOpenStatisticsMemberships: () -> Unit,
+    onCloseStatisticsMemberships: () -> Unit,
+    onRefreshMemberships: () -> Unit,
+    onActivateMembership: (String) -> Unit,
+    onOpenStatisticsPackages: () -> Unit,
+    onCloseStatisticsPackages: () -> Unit,
+    onRefreshPackages: () -> Unit,
+    onActivatePackage: (String) -> Unit,
     onSaveClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
@@ -251,7 +273,7 @@ fun ClientHomeScreen(
                     }
                 }
 
-                ClientTab.Activities -> MarketplaceTab(
+                ClientTab.Marketplace -> MarketplaceTab(
                     state = state,
                     onSearchQueryChange = onMarketplaceSearchQueryChange,
                     onCityFilterChange = onMarketplaceCityFilterChange,
@@ -272,7 +294,41 @@ fun ClientHomeScreen(
                     onBackFromTrainerReviewsClick = onMarketplaceBackFromTrainerReviewsClick
                 )
                 ClientTab.Notifications -> PlaceholderTab(text = "Уведомления")
-                ClientTab.Refresh -> PlaceholderTab(text = "Статистика")
+                ClientTab.Statistics -> {
+                    if (state.isStatisticsMembershipsOpened) {
+                        BackHandler(onBack = onCloseStatisticsMemberships)
+                        MembershipsStatisticsPage(
+                            memberships = state.memberships,
+                            isLoading = state.isMembershipsLoading,
+                            errorMessage = state.membershipsErrorMessage,
+                            activatingMembershipId = state.activatingMembershipId,
+                            onBackClick = onCloseStatisticsMemberships,
+                            onRetryClick = onRefreshMemberships,
+                            onActivateClick = onActivateMembership
+                        )
+                    } else if (state.isStatisticsPackagesOpened) {
+                        BackHandler(onBack = onCloseStatisticsPackages)
+                        PackagesStatisticsPage(
+                            packages = state.packages,
+                            isLoading = state.isPackagesLoading,
+                            errorMessage = state.packagesErrorMessage,
+                            activatingPackageId = state.activatingPackageId,
+                            onBackClick = onCloseStatisticsPackages,
+                            onRetryClick = onRefreshPackages,
+                            onActivateClick = onActivatePackage
+                        )
+                    } else {
+                        StatisticsTab(
+                            activeMembership = state.activeMembership,
+                            activePackage = state.activePackage,
+                            isLoading = state.isActiveServicesLoading,
+                            errorMessage = state.activeServicesErrorMessage,
+                            onRetryClick = onRefreshActiveServices,
+                            onMembershipsClick = onOpenStatisticsMemberships,
+                            onPackagesClick = onOpenStatisticsPackages
+                        )
+                    }
+                }
             }
         }
     }
@@ -347,6 +403,8 @@ private fun MarketplaceTab(
             GymPricesPage(
                 gym = gym,
                 selectedTab = state.gymPricesTab,
+                activeMembership = state.activeMembership,
+                activePackage = state.activePackage,
                 onBackClick = onBackFromPricesClick,
                 onTabSelected = onPricesTabSelected
             )
@@ -861,6 +919,8 @@ private fun GymActionButton(
 private fun GymPricesPage(
     gym: Gym,
     selectedTab: GymPricesTab,
+    activeMembership: ActiveMembership?,
+    activePackage: ActivePackage?,
     onBackClick: () -> Unit,
     onTabSelected: (GymPricesTab) -> Unit
 ) {
@@ -905,8 +965,15 @@ private fun GymPricesPage(
         }
 
         when (selectedTab) {
-            GymPricesTab.Memberships -> MembershipsList(items = gym.membershipTypes)
-            GymPricesTab.Packages -> TrainerPackagesList(items = gym.trainerPackages)
+            GymPricesTab.Memberships -> MembershipsList(
+                items = gym.membershipTypes,
+                activeMembership = activeMembership
+            )
+
+            GymPricesTab.Packages -> TrainerPackagesList(
+                items = gym.trainerPackages,
+                activePackage = activePackage
+            )
         }
     }
 }
@@ -1397,50 +1464,104 @@ private fun PricesTabButton(
 }
 
 @Composable
-private fun MembershipsList(items: List<GymMembershipType>) {
-    if (items.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "Услуги не найдены", color = MainText, fontFamily = FontFamily.Serif)
-        }
-        return
-    }
-
+private fun MembershipsList(
+    items: List<GymMembershipType>,
+    activeMembership: ActiveMembership?
+) {
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        items(items, key = { it.id }) { membership ->
-            ServiceCard(
-                title = membership.name,
-                description = membership.description,
-                priceText = membership.price.toRubPrice()
-            )
+        if (activeMembership != null) {
+            item(key = "active-membership") {
+                ActiveServiceCard(
+                    title = "Активное членство",
+                    description = activeMembership.membershipTypeName
+                )
+            }
+        }
+
+        if (items.isEmpty()) {
+            item(key = "empty-memberships") {
+                Text(
+                    text = "Услуги не найдены",
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        } else {
+            items(items, key = { it.id }) { membership ->
+                ServiceCard(
+                    title = membership.name,
+                    description = membership.description,
+                    priceText = membership.price.toRubPrice()
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun TrainerPackagesList(items: List<GymTrainerPackage>) {
-    if (items.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(text = "Услуги не найдены", color = MainText, fontFamily = FontFamily.Serif)
-        }
-        return
-    }
-
+private fun TrainerPackagesList(
+    items: List<GymTrainerPackage>,
+    activePackage: ActivePackage?
+) {
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        items(items, key = { it.id }) { trainerPackage ->
-            val description = trainerPackage.description
-                ?.takeIf { it.isNotBlank() }
-                ?: "Пакет на ${trainerPackage.sessionCount} занятий."
-            ServiceCard(
-                title = trainerPackage.name,
-                description = description,
-                priceText = trainerPackage.price.toRubPrice()
-            )
+        if (activePackage != null) {
+            item(key = "active-package") {
+                val trainerName = listOfNotNull(
+                    activePackage.trainerLastName?.takeIf { it.isNotBlank() },
+                    activePackage.trainerFirstName?.takeIf { it.isNotBlank() },
+                    activePackage.trainerPatronymic?.takeIf { it.isNotBlank() }
+                ).joinToString(" ").ifBlank { null }
+                val description = buildString {
+                    append(activePackage.trainerPackageName)
+                    activePackage.trainerPackageDescription
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let {
+                            append(" â€¢ ")
+                            append(it)
+                        }
+                    activePackage.sessionsLeft?.let { left ->
+                        append(" • Осталось занятий: ")
+                        append(left)
+                    }
+                    trainerName?.let { name ->
+                        append(" • ")
+                        append(name)
+                    }
+                }
+                ActiveServiceCard(
+                    title = "Активный пакет",
+                    description = description
+                )
+            }
+        }
+
+        if (items.isEmpty()) {
+            item(key = "empty-packages") {
+                Text(
+                    text = "Услуги не найдены",
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        } else {
+            items(items, key = { it.id }) { trainerPackage ->
+                val description = trainerPackage.description
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "Пакет на ${trainerPackage.sessionCount} занятий."
+                ServiceCard(
+                    title = trainerPackage.name,
+                    description = description,
+                    priceText = trainerPackage.price.toRubPrice()
+                )
+            }
         }
     }
 }
@@ -1480,6 +1601,632 @@ private fun ServiceCard(
             )
         }
     }
+}
+
+@Composable
+private fun ActiveServiceCard(
+    title: String,
+    description: String
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = description,
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatisticsTab(
+    activeMembership: ActiveMembership?,
+    activePackage: ActivePackage?,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onRetryClick: () -> Unit,
+    onMembershipsClick: () -> Unit,
+    onPackagesClick: () -> Unit
+) {
+    val membershipText = activeMembership?.membershipTypeName ?: "Нет активного членства"
+    val packageText = activePackage?.trainerPackageName ?: "Нет активного пакета"
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(color = AccentDark, modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
+        if (!errorMessage.isNullOrBlank()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = errorMessage,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onRetryClick) {
+                    Text("Повторить")
+                }
+            }
+        }
+
+        StatisticsMenuCard(
+            title = "Членства",
+            subtitle = membershipText,
+            onClick = onMembershipsClick
+        )
+        StatisticsMenuCard(
+            title = "Пакеты",
+            subtitle = packageText,
+            onClick = onPackagesClick
+        )
+        StatisticsMenuCard(
+            title = "Вес",
+            subtitle = "Калькулятор ИМТ"
+        )
+        StatisticsMenuCard(
+            title = "Мои тренировки",
+            subtitle = null
+        )
+    }
+}
+
+@Composable
+private fun StatisticsMenuCard(
+    title: String,
+    subtitle: String?,
+    onClick: (() -> Unit)? = null
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = onClick != null) { onClick?.invoke() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleLarge
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        color = MainText,
+                        fontFamily = FontFamily.Serif,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MainText
+            )
+        }
+    }
+}
+
+@Composable
+private fun MembershipsStatisticsPage(
+    memberships: List<ClientMembership>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    activatingMembershipId: String?,
+    onBackClick: () -> Unit,
+    onRetryClick: () -> Unit,
+    onActivateClick: (String) -> Unit
+) {
+    val hasActiveMembership = memberships.any { it.status == ClientMembershipStatus.ACTIVE }
+    var pendingActivationMembershipId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowLeft,
+                    contentDescription = "Назад",
+                    tint = MainText
+                )
+            }
+            Text(
+                text = "Членство",
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.headlineSmall
+            )
+        }
+
+        when {
+            isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AccentDark)
+                }
+            }
+
+            !errorMessage.isNullOrBlank() -> {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onRetryClick) {
+                        Text("Повторить")
+                    }
+                }
+            }
+
+            memberships.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Абонементы не найдены",
+                        color = MainText,
+                        fontFamily = FontFamily.Serif
+                    )
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(memberships, key = { it.id }) { membership ->
+                        MembershipCard(
+                            membership = membership,
+                            hasActiveMembership = hasActiveMembership,
+                            isActivating = activatingMembershipId == membership.id,
+                            onActivateClick = { pendingActivationMembershipId = membership.id }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (pendingActivationMembershipId != null) {
+        ActivationConfirmDialog(
+            message = "Вы точно хотите активировать абонемент?",
+            onConfirm = {
+                val id = pendingActivationMembershipId ?: return@ActivationConfirmDialog
+                pendingActivationMembershipId = null
+                onActivateClick(id)
+            },
+            onDismiss = { pendingActivationMembershipId = null }
+        )
+    }
+}
+
+@Composable
+private fun ActivationConfirmDialog(
+    message: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = ScreenBg),
+            shape = RoundedCornerShape(2.dp),
+            border = androidx.compose.foundation.BorderStroke(2.dp, Color.Black),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = message,
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.headlineLarge
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp)
+                        .clip(RoundedCornerShape(30.dp))
+                        .background(AccentDark),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onConfirm,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = ScreenBg)
+                    ) {
+                        Text(
+                            text = "Да",
+                            fontFamily = FontFamily.Serif,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .fillMaxSize()
+                            .background(ScreenBg.copy(alpha = 0.5f))
+                    )
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize(),
+                        colors = ButtonDefaults.textButtonColors(contentColor = ScreenBg)
+                    ) {
+                        Text(
+                            text = "Нет",
+                            fontFamily = FontFamily.Serif,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MembershipCard(
+    membership: ClientMembership,
+    hasActiveMembership: Boolean,
+    isActivating: Boolean,
+    onActivateClick: () -> Unit
+) {
+    val statusText = if (membership.status == ClientMembershipStatus.ACTIVE) "Активно" else "Не активно"
+    val statusColor = if (membership.status == ClientMembershipStatus.ACTIVE) {
+        Color(0xFF2BB34A)
+    } else {
+        Color(0xFFD4362A)
+    }
+    val startDate = (membership.activatedAt ?: membership.purchasedAt).toUiDate()
+    val endDate = membership.expiresAt?.toUiDate() ?: "—"
+    val canActivate = !hasActiveMembership && membership.status == ClientMembershipStatus.PURCHASED
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = "Абонемент",
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = membership.membershipTypeName,
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = statusText,
+                color = statusColor,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Действует:",
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Text(
+                text = "С $startDate по $endDate",
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.align(Alignment.Start)
+            )
+
+            if (canActivate) {
+                Button(
+                    onClick = onActivateClick,
+                    enabled = !isActivating,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentDark,
+                        contentColor = ScreenBg
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 12.dp)
+                        .size(width = 190.dp, height = 44.dp)
+                ) {
+                    if (isActivating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = ScreenBg,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Активировать", fontFamily = FontFamily.Serif)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PackagesStatisticsPage(
+    packages: List<ClientTrainerPackage>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    activatingPackageId: String?,
+    onBackClick: () -> Unit,
+    onRetryClick: () -> Unit,
+    onActivateClick: (String) -> Unit
+) {
+    val hasActivePackage = packages.any { it.status == ClientTrainerPackageStatus.ACTIVE }
+    var pendingActivationPackageId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowLeft,
+                    contentDescription = "Назад",
+                    tint = MainText
+                )
+            }
+            Text(
+                text = "Пакет услуг",
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.headlineSmall
+            )
+        }
+
+        when {
+            isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AccentDark)
+                }
+            }
+
+            !errorMessage.isNullOrBlank() -> {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(text = errorMessage, color = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onRetryClick) {
+                        Text("Повторить")
+                    }
+                }
+            }
+
+            packages.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "Пакеты не найдены",
+                        color = MainText,
+                        fontFamily = FontFamily.Serif
+                    )
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(packages, key = { it.id }) { packageItem ->
+                        PackageCard(
+                            packageItem = packageItem,
+                            hasActivePackage = hasActivePackage,
+                            isActivating = activatingPackageId == packageItem.id,
+                            onActivateClick = { pendingActivationPackageId = packageItem.id }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (pendingActivationPackageId != null) {
+        ActivationConfirmDialog(
+            message = "Вы точно хотите активировать пакет?",
+            onConfirm = {
+                val id = pendingActivationPackageId ?: return@ActivationConfirmDialog
+                pendingActivationPackageId = null
+                onActivateClick(id)
+            },
+            onDismiss = { pendingActivationPackageId = null }
+        )
+    }
+}
+
+@Composable
+private fun PackageCard(
+    packageItem: ClientTrainerPackage,
+    hasActivePackage: Boolean,
+    isActivating: Boolean,
+    onActivateClick: () -> Unit
+) {
+    val statusText = if (packageItem.status == ClientTrainerPackageStatus.ACTIVE) "Активно" else "Не активно"
+    val statusColor = if (packageItem.status == ClientTrainerPackageStatus.ACTIVE) {
+        Color(0xFF2BB34A)
+    } else {
+        Color(0xFFD4362A)
+    }
+    val canActivate = !hasActivePackage && packageItem.status == ClientTrainerPackageStatus.PURCHASED
+    val canBook = packageItem.status == ClientTrainerPackageStatus.ACTIVE
+    val trainerName = listOfNotNull(
+        packageItem.trainerLastName?.takeIf { it.isNotBlank() },
+        packageItem.trainerFirstName?.takeIf { it.isNotBlank() },
+        packageItem.trainerPatronymic?.takeIf { it.isNotBlank() }
+    ).joinToString(" ").ifBlank { null }
+    val title = trainerName?.let { "$it ${packageItem.sessionCount} занятий" } ?: packageItem.packageName
+    val startDate = (packageItem.activatedAt ?: packageItem.purchasedAt).toUiDate()
+    val endDate = packageItem.expiresAt?.toUiDate()
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = title,
+                color = MainText,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = statusText,
+                color = statusColor,
+                fontFamily = FontFamily.Serif,
+                style = MaterialTheme.typography.titleMedium
+            )
+            if (!endDate.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Действует:",
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+                Text(
+                    text = "С $startDate по $endDate",
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.align(Alignment.Start)
+                )
+            }
+            if (canBook) {
+                Text(
+                    text = "Осталось услуг: ${packageItem.sessionsLeft}",
+                    color = MainText,
+                    fontFamily = FontFamily.Serif,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(top = 8.dp)
+                )
+                Button(
+                    onClick = {},
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentDark,
+                        contentColor = ScreenBg
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 12.dp)
+                        .size(width = 190.dp, height = 44.dp)
+                ) {
+                    Text("Записаться", fontFamily = FontFamily.Serif)
+                }
+            }
+            if (canActivate) {
+                Button(
+                    onClick = onActivateClick,
+                    enabled = !isActivating,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentDark,
+                        contentColor = ScreenBg
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 12.dp)
+                        .size(width = 190.dp, height = 44.dp)
+                ) {
+                    if (isActivating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = ScreenBg,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Активировать", fontFamily = FontFamily.Serif)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun String.toUiDate(): String {
+    return runCatching {
+        LocalDate.parse(this).format(DateTimeFormatter.ofPattern("dd.MM.yy", Locale.forLanguageTag("ru")))
+    }.getOrElse { this }
 }
 
 private fun String.toRubPrice(): String {
@@ -1608,14 +2355,14 @@ private fun ClientBottomBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             BottomBarItem(
-                isSelected = selectedTab == ClientTab.Activities,
+                isSelected = selectedTab == ClientTab.Marketplace,
                 icon = {
                     Icon(
                         imageVector = ClientBottomIcons.Activities,
                         contentDescription = "Activities"
                     )
                 },
-                onClick = { onTabSelected(ClientTab.Activities) }
+                onClick = { onTabSelected(ClientTab.Marketplace) }
             )
             BottomBarItem(
                 isSelected = selectedTab == ClientTab.Notifications,
@@ -1628,14 +2375,14 @@ private fun ClientBottomBar(
                 onClick = { onTabSelected(ClientTab.Notifications) }
             )
             BottomBarItem(
-                isSelected = selectedTab == ClientTab.Refresh,
+                isSelected = selectedTab == ClientTab.Statistics,
                 icon = {
                     Icon(
                         imageVector = ClientBottomIcons.Refresh,
                         contentDescription = "Refresh"
                     )
                 },
-                onClick = { onTabSelected(ClientTab.Refresh) }
+                onClick = { onTabSelected(ClientTab.Statistics) }
             )
             BottomBarItem(
                 isSelected = selectedTab == ClientTab.Profile,
@@ -1870,4 +2617,5 @@ private object ClientBottomIcons {
             }
         }.build()
 }
+
 

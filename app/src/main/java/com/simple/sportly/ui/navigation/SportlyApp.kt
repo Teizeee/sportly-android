@@ -141,6 +141,7 @@ private fun SportlyNavGraph(
             val viewModel: ClientHomeViewModel = viewModel(
                 factory = ClientHomeViewModel.factory(
                     profileRepository = appContainer.profileRepository,
+                    clientServicesRepository = appContainer.clientServicesRepository,
                     gymRepository = appContainer.gymRepository,
                     gymReviewsRepository = appContainer.gymReviewsRepository,
                     gymTrainersRepository = appContainer.gymTrainersRepository,
@@ -174,6 +175,15 @@ private fun SportlyNavGraph(
                 onMarketplaceBackFromTrainerDetailsClick = viewModel::closeTrainerDetails,
                 onMarketplaceTrainerReviewsClick = viewModel::openTrainerReviews,
                 onMarketplaceBackFromTrainerReviewsClick = viewModel::closeTrainerReviews,
+                onRefreshActiveServices = viewModel::refreshActiveServices,
+                onOpenStatisticsMemberships = viewModel::openStatisticsMemberships,
+                onCloseStatisticsMemberships = viewModel::closeStatisticsMemberships,
+                onRefreshMemberships = viewModel::refreshMemberships,
+                onActivateMembership = viewModel::activateMembership,
+                onOpenStatisticsPackages = viewModel::openStatisticsPackages,
+                onCloseStatisticsPackages = viewModel::closeStatisticsPackages,
+                onRefreshPackages = viewModel::refreshPackages,
+                onActivatePackage = viewModel::activatePackage,
                 onSaveClick = viewModel::saveProfile,
                 onLogoutClick = {
                     coroutineScope.launch {

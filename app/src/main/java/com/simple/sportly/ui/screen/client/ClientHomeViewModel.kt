@@ -3,10 +3,17 @@ package com.simple.sportly.ui.screen.client
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.simple.sportly.domain.model.ActiveMembership
+import com.simple.sportly.domain.model.ActivePackage
+import com.simple.sportly.domain.model.ClientMembership
+import com.simple.sportly.domain.model.ClientMembershipStatus
+import com.simple.sportly.domain.model.ClientTrainerPackage
+import com.simple.sportly.domain.model.ClientTrainerPackageStatus
 import com.simple.sportly.domain.model.Gym
 import com.simple.sportly.domain.model.GymReview
 import com.simple.sportly.domain.model.GymTrainer
 import com.simple.sportly.domain.model.TrainerReview
+import com.simple.sportly.domain.repository.ClientServicesRepository
 import com.simple.sportly.domain.repository.GymRepository
 import com.simple.sportly.domain.repository.GymReviewsRepository
 import com.simple.sportly.domain.repository.GymTrainersRepository
@@ -19,9 +26,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class ClientTab {
-    Activities,
+    Marketplace,
     Notifications,
-    Refresh,
+    Statistics,
     Profile
 }
 
@@ -51,6 +58,20 @@ data class ClientHomeUiState(
     val isGymPricesOpened: Boolean = false,
     val isGymReviewsOpened: Boolean = false,
     val isGymTrainersOpened: Boolean = false,
+    val isStatisticsMembershipsOpened: Boolean = false,
+    val isStatisticsPackagesOpened: Boolean = false,
+    val activeMembership: ActiveMembership? = null,
+    val activePackage: ActivePackage? = null,
+    val isActiveServicesLoading: Boolean = false,
+    val activeServicesErrorMessage: String? = null,
+    val memberships: List<ClientMembership> = emptyList(),
+    val isMembershipsLoading: Boolean = false,
+    val membershipsErrorMessage: String? = null,
+    val activatingMembershipId: String? = null,
+    val packages: List<ClientTrainerPackage> = emptyList(),
+    val isPackagesLoading: Boolean = false,
+    val packagesErrorMessage: String? = null,
+    val activatingPackageId: String? = null,
     val gymPricesTab: GymPricesTab = GymPricesTab.Memberships,
     val gymReviews: List<GymReview> = emptyList(),
     val gymReviewsForGymId: String? = null,
@@ -76,6 +97,7 @@ data class ClientHomeUiState(
 
 class ClientHomeViewModel(
     private val profileRepository: ProfileRepository,
+    private val clientServicesRepository: ClientServicesRepository,
     private val gymRepository: GymRepository,
     private val gymReviewsRepository: GymReviewsRepository,
     private val gymTrainersRepository: GymTrainersRepository,
@@ -86,13 +108,58 @@ class ClientHomeViewModel(
 
     init {
         loadProfile()
+        loadActiveServices()
     }
 
     fun selectTab(tab: ClientTab) {
-        _uiState.update { it.copy(selectedTab = tab) }
-        if (tab == ClientTab.Activities && _uiState.value.gyms.isEmpty()) {
+        _uiState.update {
+            it.copy(
+                selectedTab = tab,
+                isStatisticsMembershipsOpened = if (tab == ClientTab.Statistics) {
+                    it.isStatisticsMembershipsOpened
+                } else {
+                    false
+                },
+                isStatisticsPackagesOpened = if (tab == ClientTab.Statistics) {
+                    it.isStatisticsPackagesOpened
+                } else {
+                    false
+                },
+            )
+        }
+        if (tab == ClientTab.Marketplace && _uiState.value.gyms.isEmpty()) {
             loadGyms()
         }
+        if (
+            tab == ClientTab.Statistics &&
+            !_uiState.value.isActiveServicesLoading &&
+            _uiState.value.activeMembership == null &&
+            _uiState.value.activePackage == null
+        ) {
+            loadActiveServices()
+        }
+    }
+
+    fun openStatisticsMemberships() {
+        _uiState.update { it.copy(isStatisticsMembershipsOpened = true) }
+        if (_uiState.value.memberships.isEmpty() && !_uiState.value.isMembershipsLoading) {
+            loadMemberships()
+        }
+    }
+
+    fun closeStatisticsMemberships() {
+        _uiState.update { it.copy(isStatisticsMembershipsOpened = false) }
+    }
+
+    fun openStatisticsPackages() {
+        _uiState.update { it.copy(isStatisticsPackagesOpened = true) }
+        if (_uiState.value.packages.isEmpty() && !_uiState.value.isPackagesLoading) {
+            loadPackages()
+        }
+    }
+
+    fun closeStatisticsPackages() {
+        _uiState.update { it.copy(isStatisticsPackagesOpened = false) }
     }
 
     fun onFirstNameChanged(value: String) {
@@ -269,6 +336,85 @@ class ClientHomeViewModel(
         loadGyms()
     }
 
+    fun refreshActiveServices() {
+        loadActiveServices()
+    }
+
+    fun refreshMemberships() {
+        loadMemberships()
+    }
+
+    fun activateMembership(membershipId: String) {
+        if (_uiState.value.activatingMembershipId != null) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    activatingMembershipId = membershipId,
+                    membershipsErrorMessage = null
+                )
+            }
+            runCatching { clientServicesRepository.activateMembership(membershipId) }
+                .onSuccess { updatedMembership ->
+                    _uiState.update { state ->
+                        state.copy(
+                            activatingMembershipId = null,
+                            memberships = state.memberships.map { membership ->
+                                if (membership.id == updatedMembership.id) updatedMembership else membership
+                            }
+                        )
+                    }
+                    loadMemberships()
+                    loadActiveServices()
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            activatingMembershipId = null,
+                            membershipsErrorMessage =
+                                throwable.message ?: "Не удалось активировать абонемент."
+                        )
+                    }
+                }
+        }
+    }
+
+    fun refreshPackages() {
+        loadPackages()
+    }
+
+    fun activatePackage(packageId: String) {
+        if (_uiState.value.activatingPackageId != null) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    activatingPackageId = packageId,
+                    packagesErrorMessage = null
+                )
+            }
+            runCatching { clientServicesRepository.activatePackage(packageId) }
+                .onSuccess { updatedPackage ->
+                    _uiState.update { state ->
+                        state.copy(
+                            activatingPackageId = null,
+                            packages = state.packages.map { packageItem ->
+                                if (packageItem.id == updatedPackage.id) updatedPackage else packageItem
+                            }
+                        )
+                    }
+                    loadPackages()
+                    loadActiveServices()
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            activatingPackageId = null,
+                            packagesErrorMessage = throwable.message ?: "Не удалось активировать пакет."
+                        )
+                    }
+                }
+        }
+    }
+
     fun saveProfile() {
         val state = _uiState.value
         if (state.firstName.isBlank() || state.lastName.isBlank() || state.email.isBlank()) {
@@ -338,6 +484,107 @@ class ClientHomeViewModel(
                         it.copy(
                             isLoading = false,
                             errorMessage = throwable.message ?: "Failed to load profile."
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun loadActiveServices() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isActiveServicesLoading = true,
+                    activeServicesErrorMessage = null
+                )
+            }
+            runCatching { clientServicesRepository.getMyActiveServices() }
+                .onSuccess { activeServices ->
+                    _uiState.update {
+                        it.copy(
+                            isActiveServicesLoading = false,
+                            activeMembership = activeServices.activeMembership,
+                            activePackage = activeServices.activePackage
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isActiveServicesLoading = false,
+                            activeServicesErrorMessage =
+                                throwable.message ?: "Failed to load active services."
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun loadMemberships() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isMembershipsLoading = true,
+                    membershipsErrorMessage = null
+                )
+            }
+            runCatching { clientServicesRepository.getMyMemberships() }
+                .onSuccess { memberships ->
+                    val sortedMemberships = memberships.sortedBy { membership ->
+                        when (membership.status) {
+                            ClientMembershipStatus.ACTIVE -> 0
+                            ClientMembershipStatus.PURCHASED -> 1
+                            ClientMembershipStatus.EXPIRED -> 2
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isMembershipsLoading = false,
+                            memberships = sortedMemberships
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isMembershipsLoading = false,
+                            membershipsErrorMessage =
+                                throwable.message ?: "Не удалось загрузить абонементы."
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun loadPackages() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isPackagesLoading = true,
+                    packagesErrorMessage = null
+                )
+            }
+            runCatching { clientServicesRepository.getMyPackages() }
+                .onSuccess { packages ->
+                    val sortedPackages = packages.sortedBy { packageItem ->
+                        when (packageItem.status) {
+                            ClientTrainerPackageStatus.ACTIVE -> 0
+                            ClientTrainerPackageStatus.PURCHASED -> 1
+                            ClientTrainerPackageStatus.FINISHED -> 2
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isPackagesLoading = false,
+                            packages = sortedPackages
+                        )
+                    }
+                }
+                .onFailure { throwable ->
+                    _uiState.update {
+                        it.copy(
+                            isPackagesLoading = false,
+                            packagesErrorMessage = throwable.message ?: "Не удалось загрузить пакеты."
                         )
                     }
                 }
@@ -480,6 +727,7 @@ class ClientHomeViewModel(
     companion object {
         fun factory(
             profileRepository: ProfileRepository,
+            clientServicesRepository: ClientServicesRepository,
             gymRepository: GymRepository,
             gymReviewsRepository: GymReviewsRepository,
             gymTrainersRepository: GymTrainersRepository,
@@ -490,6 +738,7 @@ class ClientHomeViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     return ClientHomeViewModel(
                         profileRepository = profileRepository,
+                        clientServicesRepository = clientServicesRepository,
                         gymRepository = gymRepository,
                         gymReviewsRepository = gymReviewsRepository,
                         gymTrainersRepository = gymTrainersRepository,

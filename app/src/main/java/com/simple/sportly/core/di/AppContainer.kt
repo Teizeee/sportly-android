@@ -5,6 +5,7 @@ import com.simple.sportly.BuildConfig
 import com.simple.sportly.core.network.NetworkModule
 import com.simple.sportly.data.local.SessionStore
 import com.simple.sportly.data.remote.api.auth.AuthApi
+import com.simple.sportly.data.remote.api.client.ClientServicesApi
 import com.simple.sportly.data.remote.api.gym.GymsApi
 import com.simple.sportly.data.remote.api.gym.GymTrainersApi
 import com.simple.sportly.data.remote.api.profile.AvatarApi
@@ -13,6 +14,7 @@ import com.simple.sportly.data.remote.api.review.GymReviewsApi
 import com.simple.sportly.data.remote.api.review.TrainerReviewsApi
 import com.simple.sportly.data.remote.api.slots.TrainerSlotsApi
 import com.simple.sportly.data.repository.AuthRepositoryImpl
+import com.simple.sportly.data.repository.ClientServicesRepositoryImpl
 import com.simple.sportly.data.repository.GymRepositoryImpl
 import com.simple.sportly.data.repository.GymReviewsRepositoryImpl
 import com.simple.sportly.data.repository.GymTrainersRepositoryImpl
@@ -20,6 +22,7 @@ import com.simple.sportly.data.repository.ProfileRepositoryImpl
 import com.simple.sportly.data.repository.TrainerReviewsRepositoryImpl
 import com.simple.sportly.data.repository.TrainerSlotsRepositoryImpl
 import com.simple.sportly.domain.repository.AuthRepository
+import com.simple.sportly.domain.repository.ClientServicesRepository
 import com.simple.sportly.domain.repository.GymRepository
 import com.simple.sportly.domain.repository.GymReviewsRepository
 import com.simple.sportly.domain.repository.GymTrainersRepository
@@ -31,6 +34,7 @@ interface AppContainer {
     val sessionStore: SessionStore
     val authRepository: AuthRepository
     val profileRepository: ProfileRepository
+    val clientServicesRepository: ClientServicesRepository
     val gymRepository: GymRepository
     val gymReviewsRepository: GymReviewsRepository
     val gymTrainersRepository: GymTrainersRepository
@@ -48,6 +52,7 @@ class DefaultAppContainer(
     )
     private val authApi: AuthApi = retrofit.create(AuthApi::class.java)
     private val profileApi: ProfileApi = retrofit.create(ProfileApi::class.java)
+    private val clientServicesApi: ClientServicesApi = retrofit.create(ClientServicesApi::class.java)
     private val gymsApi: GymsApi = retrofit.create(GymsApi::class.java)
     private val gymTrainersApi: GymTrainersApi = retrofit.create(GymTrainersApi::class.java)
     private val gymReviewsApi: GymReviewsApi = retrofit.create(GymReviewsApi::class.java)
@@ -57,6 +62,8 @@ class DefaultAppContainer(
 
     override val authRepository: AuthRepository = AuthRepositoryImpl(authApi)
     override val profileRepository: ProfileRepository = ProfileRepositoryImpl(profileApi, avatarApi)
+    override val clientServicesRepository: ClientServicesRepository =
+        ClientServicesRepositoryImpl(clientServicesApi)
     override val gymRepository: GymRepository = GymRepositoryImpl(gymsApi)
     override val gymReviewsRepository: GymReviewsRepository =
         GymReviewsRepositoryImpl(gymReviewsApi)
