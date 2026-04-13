@@ -1122,7 +1122,7 @@ private fun MembershipCard(
     } else {
         Color(0xFFD4362A)
     }
-    val startDate = (membership.activatedAt ?: membership.purchasedAt).toUiDate()
+    val startDate = membership.activatedAt?.toUiDate() ?: "—"
     val endDate = membership.expiresAt?.toUiDate() ?: "—"
     val canActivate = !hasActiveMembership && membership.status == ClientMembershipStatus.PURCHASED
 
